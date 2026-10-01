@@ -9,12 +9,12 @@ From the repository root:
 
 ```text
 py -3.11 -m venv .venv
-.venv\Scripts\python -m pip install --upgrade pip
-.venv\Scripts\python -m pip install -e ".[dev]"
+.venv\Scripts\python -m pip install -r requirements-cpu.lock
+.venv\Scripts\python -m pip install --no-build-isolation --no-deps -e .
 .venv\Scripts\python -m fly_abstraction doctor
-.venv\Scripts\python -m fly_abstraction --profile local_cpu show-config
+.venv\Scripts\python -m fly_abstraction --profile smoke_cpu show-config
 .venv\Scripts\python -m fly_abstraction data prepare-tiny
-.venv\Scripts\python -m fly_abstraction --profile local_cpu train
+.venv\Scripts\python -m fly_abstraction --profile smoke_cpu train
 ```
 
 The last command is the required dry-run. After reviewing its parameters, RAM, free

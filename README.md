@@ -1,115 +1,152 @@
 # Fly Abstraction Lab
 
-Fly Abstraction Lab is a reproducible research platform for testing whether a neural
-network whose recurrent topology is constrained by a Drosophila connectome exhibits
-stronger systematic physics/mathematics generalization than matched random graphs and
-standard neural baselines.
+Fly Abstraction Lab tests whether **connectome-constrained topology changes transfer of
+physics/mathematics abstractions** relative to matched graph controls and conventional
+neural baselines. It does not test whether a fly brain literally “understands math,” and
+a model difference would not establish animal cognition or a biological causal mechanism.
 
-The project tests operational behaviors: transfer to new numbers, renamed symbols,
-equivalent expressions, rearranged equations, unseen templates, compositions of known
-rules, and irrelevant variables. It does **not** claim that a fly, a connectome, or a
-trained network understands mathematics. A topology advantage would be an empirical
-model result, not evidence of animal cognition or a biological causal mechanism.
+## Current MVP boundary
 
-## Confirmatory target
+The implemented task mode is finite numeric regression (`task.mode: numeric`). Every
+target is parsed and validated before encoding; strings that are not numbers and
+`NaN`/`Inf` are rejected. Reported metrics are MAE, RMSE, mean relative error, and
+tolerance accuracy. The primary pilot outcome is tolerance accuracy on the compositional
+held-out-template OOD split. Symbolic target generation/scoring is a separately marked
+future stage and is not represented as working support.
 
-The primary metric is **Exact solution rate on compositional held-out-template OOD
-split**. SymPy-equivalent accuracy and transformation-specific results are secondary.
-No arbitrary aggregate “abstraction score” is used. The full hypotheses, matching
-rules, leakage controls, and interpretation policy are in [RESEARCH_PROTOCOL.md](RESEARCH_PROTOCOL.md).
+Every split is stored as a deterministic manifest containing example IDs, dataset
+version, seed, explicit rules, and SHA256. Repeating the same inputs and rules reuses an
+identical manifest.
+
+## Environments
+
+- CPU: Python 3.11.9 and PyTorch 2.7.1 CPU from `requirements-cpu.lock`.
+- GPU: official
+  [`pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime`](https://hub.docker.com/r/pytorch/pytorch/tags)
+  image pinned to digest
+  `sha256:c16f4c749e2d9e96878875cdf6cc45cddda1d1a36fddd371dd6f2360f1b6e2a2`.
+- PyTorch 2.7 introduced Blackwell support and CUDA 12.8 wheels; see the
+  [official PyTorch 2.7 release post](https://pytorch.org/blog/pytorch-2-7/).
+
+The GPU image build asserts PyTorch 2.7.1, CUDA 12.8, and compiled `sm_120` support.
+`doctor-gpu` additionally checks the visible GPU, VRAM, compute capability, FP16/BF16/
+TF32 availability, and Blackwell readiness at runtime.
+
+## Laptop: safe quick start
+
+Windows PowerShell, Python 3.11:
+
+```text
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-cpu.lock
+.venv\Scripts\python -m pip install --no-build-isolation --no-deps -e .
+.venv\Scripts\python -m fly_abstraction doctor
+.venv\Scripts\python -m pytest -q
+.venv\Scripts\python -m fly_abstraction --profile smoke_cpu train
+```
+
+The last command is a dry-run: it prints the resolved parameters and resource estimate,
+does not enter the training function, and creates no run directory. See
+[RUN_LOCAL.md](RUN_LOCAL.md) for the optional explicitly confirmed tiny CPU run.
+
+## RTX research PC
+
+Use [RUN_RESEARCH_PC.md](RUN_RESEARCH_PC.md). The intended order is image build,
+`doctor-gpu`, `smoke-gpu`, data preparation, pilot dry-run, then a separately confirmed
+pilot. `smoke-gpu` performs exactly one tiny forward/backward under autocast, with no
+optimizer and no parameter update.
+
+`paper_gpu` is deliberately blocked until all of the following are present:
+
+- CUDA is visible;
+- the estimator reports nodes, edges, batch, sequence length, RAM, and VRAM within the
+  configured headroom;
+- `--confirm-train`, `--confirm-heavy-run`, and `--accept-resource-estimate` are all
+  supplied.
 
 ## Data
 
-Every source is converted to the immutable `MathProblem` schema and retains
-`source_id`/`template_id` provenance.
+The real numeric pilot dataset is
+[UCI Energy Efficiency (ID 242)](https://archive.ics.uci.edu/dataset/242/energy+efficiency),
+version `UCI-242-2024-02-26`, DOI `10.24432/C51307`, CC BY 4.0. It has 768 rows, eight
+numeric features, and two numeric targets; the MVP predicts heating load (`Y1`).
 
-- [DeepMind Mathematics Dataset](https://github.com/google-deepmind/mathematics_dataset)
-  (Apache-2.0 code/data generator; Saxton et al., 2019)
-- [SRSD-Feynman](https://github.com/omron-sinicx/srsd-benchmark) (external scientific
-  symbolic-regression source; Matsubara et al., 2024)
-- [SciBench](https://github.com/mandyyyyii/scibench) (optional external benchmark;
-  Wang et al., ICML 2024)
-- `TinyDataset`: at most 100 deterministic, locally generated wiring-test problems
-
-The registry records URL, version, license note, citation, adapter, and expected size.
-No real dataset or FlyWire artifact is bundled or downloaded automatically. Review the
-upstream terms and source-text rights before acquisition or redistribution.
-
-## Graphs and models
-
-`ConnectomeGraph` stores directed `edge_index`, `edge_weight`, metadata, and a manifest.
-It supports filtering, incoming/outgoing normalization, aggregation, content hashing,
-and a future local FlyWire FAFB v783 export. The included tiny graph never exceeds 128
-nodes. Controls are degree-preserving rewiring, matched directed Erdos-Renyi, shuffled
-weights, and shuffled directions.
-
-Implemented models share answer and expression-token heads:
-
-- `FixedConnectomeReservoir`
-- `TrainableConnectomeRNN`
-- `RandomGraphReservoir`
-- GRU baseline
-- MLP baseline
-
-The graph RNN has one recurrent parameter per existing edge and no trainable off-graph
-recurrent matrix. A registry is provided for later LSTM and SmallTransformer baselines.
-
-## Safety-first quick start
-
-Requires Python 3.11.
+Importing the package never downloads it. First review metadata/disk use:
 
 ```text
-python -m venv .venv
-.venv\Scripts\python -m pip install -e ".[dev]"
-.venv\Scripts\python -m fly_abstraction doctor
-.venv\Scripts\python -m fly_abstraction data prepare-tiny
-.venv\Scripts\python -m fly_abstraction --profile local_cpu train
+python -m fly_abstraction data download uci_energy_efficiency
 ```
 
-The final command is a dry-run. It does not construct a result directory or enter the
-training function. To manually authorize the bounded laptop run:
+Only a human should then add `--confirm-download`. The command accepts only the pinned
+official UCI URL, streams to a temporary file, refuses overwrite, computes SHA256, and
+writes an adjacent download manifest with source, version, license, byte size, and hash.
+UCI's API does not publish a pre-download digest, so this limitation is explicit; the
+first confirmed download pins the received bytes rather than inventing a checksum.
+
+Convert the confirmed CSV to validated numeric JSONL with:
 
 ```text
-.venv\Scripts\python -m fly_abstraction --profile local_cpu train --confirm-train --run-id local_cpu_001
+python -m fly_abstraction data prepare-uci-energy
 ```
 
-Never add confirmation flags in unattended automation. `paper_gpu` additionally needs
-`--confirm-heavy-run` and an available CUDA device. Local safety limits cannot be
-exceeded without `--override-local-safety`. Result directories are append-only.
+No raw or prepared real data is committed.
 
-See [RUN_LOCAL.md](RUN_LOCAL.md) for venv and Docker CPU procedures and
-[RUN_RESEARCH_PC.md](RUN_RESEARCH_PC.md) for the manual RTX research workflow.
+## Graphs and controls
 
-## Reproducibility
+Large graphs use compressed NumPy NPZ, not JSON. Hashing streams contiguous tensor bytes
+without converting edge tensors to Python lists. Supported `graph.variant` values are:
 
-YAML profiles are resolved from `configs/base.yaml` plus a hardware profile. Runs fix
-Python/NumPy/PyTorch seeds and can enable deterministic algorithms. Each confirmed run
-writes under `results/<run_id>/`:
+- `real`
+- `degree_preserving`
+- `weight_shuffled`
+- `direction_shuffled`
+- `er_random`
 
-- `summary.json`, `metrics.json`, `history.csv`
-- `run_manifest.json`, `predictions.jsonl`, `config.resolved.yaml`
-- `checkpoint.pt` only when the profile enables checkpoints
+Every control retains the exact input-node and output-node mappings. The two random
+topology controls are explicitly directed multigraph controls, which makes generation
+linear in edge count and avoids large Python edge sets.
 
-The manifest includes Git commit/dirty state, OS, CPU, RAM, GPU, Python, PyTorch, CUDA,
-seed, dependency versions, and hashes of the data, graph, and configuration. Statistical
-helpers provide template-level aggregation, bootstrap intervals, paired permutation
-tests, Holm correction, and tidy sample-efficiency points.
+FlyWire access and authorization are intentionally outside this repository. Given a
+user-authorized local FAFB v783 CSV already aggregated to columns
+`pre_group,post_group,synapse_count`, convert it without any network access:
+
+```text
+python -m fly_abstraction graph convert-flywire --edges data/raw/flywire/authorized_v783_groups.csv --output data/processed/flywire_fafb_v783.npz
+```
+
+The converter streams the CSV through an on-disk SQLite aggregation, writes NPZ plus a
+CSV node map, records the source SHA256, and refuses overwrite. It does not bypass
+FlyWire authentication or data-use terms.
+
+## Models and artifacts
+
+Implemented model families are fixed/trainable connectome reservoirs, a matched random
+graph reservoir, GRU, and MLP. The numeric answer head is the only trained/scored MVP
+head; the legacy expression head is retained only as an untrained future extension
+point.
+
+Confirmed runs are append-only under `results/<run_id>/` and include resolved config,
+Git/environment/hardware manifest, hashes for data/config/graph/split, history,
+predictions, metrics, summary, and an optional checkpoint.
 
 ## Development checks
 
 ```text
+ruff format --check .
 ruff check .
-pytest
-python -m fly_abstraction --profile local_cpu show-config
-python -m fly_abstraction data list
-docker compose config
+pytest -q
+python -m fly_abstraction doctor
+python -m fly_abstraction --profile smoke_cpu show-config
+python -m fly_abstraction --profile smoke_cpu train
+docker compose config --quiet
+docker buildx build --check --file Dockerfile.cpu .
+docker buildx build --check --file Dockerfile.gpu .
 ```
 
-CPU-only GitHub Actions runs lint, tests, and the guaranteed train dry-run. It never
-downloads data, builds GPU images, or starts training.
+CI runs lint, unit tests (GPU tests skip when CUDA is absent), CLI dry-runs, and Dockerfile
+build checks. It performs no training, real-data downloads, GPU work, or image-layer
+builds.
 
-## License
-
-Project code is MIT licensed. External datasets and connectome exports retain their own
-terms; registry metadata is not a substitute for reviewing upstream licenses.
-
+The detailed hypothesis and analysis boundary is in
+[RESEARCH_PROTOCOL.md](RESEARCH_PROTOCOL.md). Project code is MIT; external datasets and
+connectome exports retain their own terms.

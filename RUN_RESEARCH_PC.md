@@ -1,45 +1,118 @@
-# Research PC workflow (future GPU runs)
+# RTX 5090 research-PC workflow
 
-Nothing in this document is executed automatically. Use it later on the RTX 5090 host.
+These are manual commands for a Windows/PowerShell host with 32 GB RAM, Docker Desktop,
+the NVIDIA Container Toolkit integration, and a driver new enough to run CUDA 12.8
+containers. They are not run by setup, tests, or CI.
 
-## Transfer the exact code
+## 1. Clone the exact branch
 
 ```text
 git clone https://github.com/maggogerka/fly-abstraction-lab.git
 cd fly-abstraction-lab
-git switch feat/research-mvp
+git switch feat/research-pc-readiness
 git rev-parse HEAD
+git status --short
 ```
 
-Install Python 3.11 and a PyTorch build compatible with the host driver/CUDA runtime,
-then install the project. Do not change Python code between machines; place reviewed
-hardware/experiment values in `configs/paper_gpu.yaml` or a separate YAML override.
+Keep the printed commit hash with the results. The worktree should be clean.
 
-## Prepare external assets manually
+## 2. Build and inspect the pinned GPU environment
 
-1. Review registry URLs, citations, licenses, expected sizes, RAM, and free disk.
-2. Acquire datasets only after explicit authorization and convert them to canonical
-   JSONL `MathProblem` records with stable source/template IDs.
-3. Export the permitted FlyWire FAFB v783 graph locally with its release manifest.
-4. Hash and retain the raw/prepared manifests. Never commit licensed raw data.
-5. Run leakage checks before any experiment.
-
-## Validate without training
+The Dockerfile uses the official PyTorch 2.7.1/CUDA 12.8/cuDNN 9 image pinned by digest
+and verifies that `sm_120` is compiled in.
 
 ```text
-python -m fly_abstraction --profile paper_gpu doctor
-python -m fly_abstraction --profile paper_gpu show-config
-python -m fly_abstraction --profile paper_gpu train
+docker compose --profile research build research-gpu
+New-Item -ItemType Directory -Force results\diagnostics
+docker compose --profile research run --rm research-gpu doctor-gpu | Tee-Object results\diagnostics\doctor-gpu.json
 ```
 
-The third command is still a dry-run. Only a human who has reviewed the resolved config
-and resources should later add both gates:
+Stop if `blackwell_ready` is false, CUDA is absent, the GPU name is unexpected, or VRAM
+is materially below the RTX 5090's expected capacity. Do not paper over a failed doctor
+with a different unpinned PyTorch install.
+
+## 3. Run the no-training GPU smoke check
 
 ```text
-python -m fly_abstraction --profile paper_gpu train --confirm-train --confirm-heavy-run --run-id paper_gpu_seed1701
+docker compose --profile research run --rm research-gpu smoke-gpu | Tee-Object results\diagnostics\smoke-gpu.json
 ```
 
-The command refuses to proceed without CUDA. Use unique run IDs and push code/config
-commits before recording confirmatory results. Do not merge exploratory and confirmatory
-families when applying Holm correction.
+Expected fields are `forward: ok`, `backward: ok`, finite loss/gradient, and
+`optimizer_step: false`. This is one tiny forward/backward only.
 
+## 4. Prepare the real numeric pilot data
+
+Review official UCI metadata first; this makes no network data request:
+
+```text
+docker compose --profile research run --rm research-gpu data download uci_energy_efficiency
+```
+
+After independently reviewing the URL, CC BY 4.0 license, expected size, and free disk,
+the human-authorized download is:
+
+```text
+docker compose --profile research run --rm research-gpu data download uci_energy_efficiency --confirm-download
+docker compose --profile research run --rm research-gpu data prepare-uci-energy
+```
+
+Retain `data/raw/uci_energy_efficiency/data.csv.download.json`. It records the SHA256 of
+the received official bytes. The UCI API does not publish an advance checksum; this is
+documented rather than replaced with an invented value.
+
+## 5. Review the small pilot
+
+`pilot_gpu` uses 768 numeric UCI examples and a 256-node synthetic graph. It validates
+the GPU/numeric/split/artifact path; by itself it is not evidence for a biological or
+connectome-topology claim.
+
+```text
+docker compose --profile research run --rm research-gpu --profile pilot_gpu show-config
+docker compose --profile research run --rm research-gpu --profile pilot_gpu train
+```
+
+The second command must say `DRY-RUN COMPLETE` and display nodes, edges, batch, sequence
+length, estimated RAM/VRAM, and available memory. If it reports a guard issue, reduce the
+corresponding values; do not bypass the guard.
+
+## 6. Start the pilot only after review
+
+This is the only command below that trains:
+
+```text
+docker compose --profile research run --rm research-gpu --profile pilot_gpu train --confirm-train --run-id pilot_gpu_seed1701
+```
+
+Do not reuse a run ID. Do not launch `paper_gpu` from this guide. The paper profile also
+requires `--confirm-heavy-run --accept-resource-estimate`, CUDA, and a prepared local
+FlyWire NPZ; it should be reviewed separately after the pilot.
+
+## Optional: authorized local FlyWire export
+
+The project does not access FlyWire. If the owner has already exported an authorized
+FAFB v783 aggregate with `pre_group,post_group,synapse_count` columns:
+
+```text
+docker compose --profile research run --rm research-gpu graph convert-flywire --edges data/raw/flywire/authorized_v783_groups.csv --output data/processed/flywire_fafb_v783.npz
+```
+
+The resulting NPZ and `.nodes.csv` remain local and must not be redistributed unless the
+source terms permit it.
+
+## Return package after the pilot
+
+Send the repository owner:
+
+- `results/diagnostics/doctor-gpu.json`
+- `results/diagnostics/smoke-gpu.json`
+- the commit hash from `git rev-parse HEAD`
+- `data/raw/uci_energy_efficiency/data.csv.download.json`
+- `data/processed/splits/*.json`
+- from `results/pilot_gpu_seed1701/`: `config.resolved.yaml`, `run_manifest.json`,
+  `summary.json`, `metrics.json`, `history.csv`, and `predictions.jsonl`
+- `checkpoint.pt` only if model continuation is required (it is larger and is not
+  needed for a first metrics review)
+- the complete terminal error text instead of partial artifacts if the run stops
+
+Do not send licensed FlyWire raw exports or prepared connectomes without confirming that
+redistribution is allowed.

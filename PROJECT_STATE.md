@@ -2,65 +2,90 @@
 
 Last updated: 2026-10-01
 
-## Completed
+## Current branch and scope
 
-- Captured repository-wide safety constraints in `AGENTS.md`.
-- Defined the scientific hypotheses and analysis contract in `RESEARCH_PROTOCOL.md`.
-- Added initial project metadata, licensing, and ignore rules.
-- Added Python 3.11 `src/` package metadata and merged YAML profiles for `local_cpu`
-  and `paper_gpu`, including enforceable laptop limits and two-step heavy-run gating.
-- Implemented canonical `MathProblem`, adapters for DeepMind Mathematics,
-  SRSD-Feynman, SciBench, and deterministic TinyDataset generation.
-- Implemented deterministic symbol/numeric/equivalence/equation/distractor/template/
-  compositional OOD handling, SymPy equivalence checks, and template leakage guards.
-- Implemented directed `ConnectomeGraph`, manifest/hash, filtering, normalization,
-  aggregation, a <=128-node synthetic graph, and local-only FlyWire FAFB v783 adapter.
-- Implemented degree-preserving, Erdos-Renyi, weight-shuffled, and direction-shuffled
-  controls with invariant checks.
-- Implemented fixed/trainable connectome models, random reservoir, GRU and MLP with
-  symbolic plus numeric inputs, answer/expression heads, sparse edge-only recurrence,
-  parameter counts, device resolution, and finite-value checks.
-- Implemented (but did not run) AdamW training/validation/test, clipping, early stopping,
-  resume, deterministic seeds, mixed precision, metrics, and append-only run artifacts.
-- Implemented bootstrap intervals, paired permutation test, Holm correction,
-  template aggregation, and sample-efficiency record format.
-- Added safety-gated CLI, CPU/GPU Docker definitions, Compose, CPU-only CI, tests,
-  local/research-PC guides, and citation metadata.
-- Created private GitHub repository `maggogerka/fly-abstraction-lab`, attached `origin`,
-  and pushed `main` plus `feat/research-mvp` without creating a PR or merge.
+- Working branch: `feat/research-pc-readiness`, created from `feat/research-mvp`.
+- Scientific question: whether connectome-constrained topology affects transfer of
+  physics/mathematics abstractions relative to matched controls—not whether a fly brain
+  literally understands mathematics.
+- Implemented MVP task: finite numeric regression only. Symbolic targets are explicitly
+  a future stage.
+- No training, real-data download, GPU task, Docker layer build, or result analysis was
+  run during this stage.
 
-## Decisions
+## Implemented in this stage
 
-- Python 3.11 with a `src/` package layout.
-- YAML profiles are the only intended difference between laptop and research-PC runs.
-- Primary metric: exact solution rate on the compositional held-out-template OOD split.
-- Tiny generated data and a synthetic connectome are the only locally prepared assets.
+- Pinned Python/PyTorch/dependency environments with `requirements.lock` and
+  `requirements-cpu.lock`; pinned CPU and GPU base-image digests.
+- Updated GPU runtime to official PyTorch 2.7.1, CUDA 12.8, cuDNN 9 with `sm_120`
+  assertion for Blackwell/RTX 5090.
+- Added `doctor-gpu` and `smoke-gpu`; the latter performs one tiny mixed-precision
+  forward/backward without optimizer creation or parameter update.
+- Added `smoke_cpu`, `smoke_gpu`, and bounded `pilot_gpu` profiles. Reduced the former
+  paper profile to finite numeric data/5k graph nodes and added three independent gates:
+  confirmed training, heavy-run confirmation, and resource-estimate acceptance.
+- Added conservative RAM/VRAM estimation from graph nodes/edges, batch, sequence length,
+  activations, graph storage, and optimizer/model state. Both CLI and training API stop
+  unsafe runs before training; actual graph size is checked again after loading.
+- Enforced `task.mode: numeric`; invalid numeric strings and `NaN`/`Inf` now fail during
+  schema validation instead of entering tensors. Added MAE, RMSE, mean relative error,
+  and tolerance accuracy with configured tolerances.
+- Added deterministic order-independent split manifests with IDs, dataset/version, seed,
+  explicit rules, source-ID SHA256, and manifest SHA256. Existing manifests are reused
+  only when identical.
+- Added selectable graph variants: `real`, `degree_preserving`, `weight_shuffled`,
+  `direction_shuffled`, and `er_random`. Controls preserve edge/node counts, weights, and
+  identical input/output mappings; models now use those mappings explicitly.
+- Replaced large-graph JSON as the primary format with compressed NPZ. Graph hashing
+  streams tensor bytes without `.tolist()`. Random controls use tensor operations instead
+  of large Python edge lists/sets.
+- Added consent-gated UCI Energy Efficiency acquisition from the official pinned URL.
+  It requires `--confirm-download`, streams with a size cap, refuses overwrite, computes
+  SHA256, and records source/version/license/hash in an adjacent manifest. UCI does not
+  publish an advance digest in its API; this limitation is recorded explicitly.
+- Added UCI numeric preparation for 768 rows and a local-only FlyWire FAFB v783 converter
+  for authorized aggregated CSV exports. The converter uses on-disk SQLite aggregation,
+  NPZ output, a CSV node map, and source SHA256; it performs no network/authentication.
+- Expanded tests for numeric/finite targets, metrics, split reproducibility, graph
+  variants and I/O mappings, binary graph hashes, resource guard, CLI safety, local
+  FlyWire conversion, streaming download checksums, and GPU skip behavior.
+- CI now checks formatting, lint, unit tests, CLI doctor/config/train dry-run, Compose
+  syntax, and Dockerfile build checks without training or data downloads.
+- Updated README, research-PC/local runbooks, protocol, and operating rules.
 
-## Validation
+## Validation performed
 
-- Installed Python 3.11.9 through the official Python Install Manager and created the
-  ignored local `.venv`; project dependencies installed successfully.
+- `ruff format --check .`: passed (45 files formatted).
 - `ruff check .`: passed.
-- `pytest`: 16 passed in 11.20s, including exactly one forward/backward without an
-  optimizer step.
-- `doctor`: passed on Python 3.11.9 / PyTorch 2.14.1+cpu; CUDA correctly unavailable.
-- `show-config`: passed for `local_cpu`, with every required limit resolved correctly.
-- `data list`: passed; only registry metadata was read.
-- `data prepare-tiny`: generated 100 deterministic ignored JSONL records locally.
-- `train` without confirmation: passed as a side-effect-free dry-run; no result run
-  directory was created.
-- `docker compose config --quiet`: passed; no image was built and no service started.
-- GitHub remote verified private and both requested branches pushed successfully.
-- No training or download has been run.
+- `pytest -q`: 40 passed, 1 skipped; the only skip is the Blackwell GPU smoke test because
+  this machine has CPU-only PyTorch/CUDA unavailable.
+- `doctor`: passed on Python 3.11.9; local PyTorch is 2.14.1+cpu and CUDA is correctly
+  unavailable. The target Docker environments remain pinned to PyTorch 2.7.1.
+- `show-config` and side-effect-free `train` dry-run passed for `smoke_cpu`; the dry-run
+  printed nodes, edges, batch, sequence length, RAM/VRAM estimates and created no run.
+- UCI download dry-run passed and performed no download.
+- `docker compose config --quiet`: passed.
+- Official image manifests were resolved without pulling layers: GPU digest
+  `sha256:c16f4c...e2a2`; CPU multi-platform digest `sha256:8fb099...c317`.
+- Local `docker buildx build --check` for both Dockerfiles could not connect because
+  Docker Desktop's Linux engine is not running. No daemon was started automatically;
+  equivalent checks are configured in CI.
 
-## Constraints observed
+## Known limitations
 
-- No training, real downloads, Docker builds, or services have been started.
-- The real dataset/connectome adapters require separately authorized, license-compliant
-  local artifacts before a research run.
+- `smoke-gpu` and actual RTX 5090 behavior must be run on the friend's machine.
+- The UCI API exposes version/license/source metadata but no published pre-download
+  digest. The confirmed command pins the received bytes by SHA256; compare that manifest
+  between machines before using the dataset.
+- The pilot uses a small synthetic topology to validate the stack. Scientific graph
+  comparisons require an authorized local FlyWire export, declared variants/seeds, and
+  a separately approved experiment plan.
+- Directed degree-preserving and ER controls are multigraph null models; duplicates and
+  self-loops are documented where applicable and should be considered in interpretation.
+- Symbolic target training/evaluation is not implemented.
 
-## Next step
+## Next manual action
 
-A human may run the confirmed `local_cpu` command and analyze the append-only artifacts
-under `results/<run_id>/`; paper-scale assets and execution remain explicitly deferred.
-
+On the RTX 5090 PC, follow `RUN_RESEARCH_PC.md`: clone the branch, build the pinned image,
+run `doctor-gpu`, run `smoke-gpu`, explicitly prepare UCI data, inspect the pilot dry-run,
+and only then decide whether to issue the confirmed pilot command.

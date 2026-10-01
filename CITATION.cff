@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using this metadata."
+title: "Fly Abstraction Lab"
+type: software
+authors:
+  - family-names: "maggogerka"
+version: 0.1.0
+date-released: 2026-10-01
+license: MIT
+repository-code: "https://github.com/maggogerka/fly-abstraction-lab"
+keywords:
+  - connectome
+  - systematic generalization
+  - symbolic mathematics
+  - reproducibility
+

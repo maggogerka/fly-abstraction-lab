@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fly-abstraction"
+version = "0.1.0"
+description = "Connectome-constrained systematic generalization research platform"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = {file = "LICENSE"}
+authors = [{name = "maggogerka"}]
+dependencies = [
+  "numpy==2.2.6",
+  "psutil==7.0.0",
+  "PyYAML==6.0.2",
+  "sympy==1.14.0",
+  "torch==2.7.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.4.1", "ruff==0.12.7"]
+
+[project.scripts]
+fly-abstraction = "fly_abstraction.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+

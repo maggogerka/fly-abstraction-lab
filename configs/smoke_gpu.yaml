@@ -1,0 +1,21 @@
+profile: smoke_gpu
+data:
+  max_examples: 64
+  sequence_length: 32
+graph:
+  kind: tiny_synthetic
+  variant: real
+  max_graph_nodes: 32
+  expected_num_nodes: 32
+  expected_num_edges: 64
+model:
+  hidden_size: 32
+training:
+  max_epochs: 1
+  batch_size: 4
+  num_workers: 0
+  checkpoints: false
+runtime:
+  device: cuda
+  torch_threads: 4
+  mixed_precision: true

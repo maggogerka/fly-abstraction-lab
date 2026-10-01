@@ -2,70 +2,91 @@
 
 ## Research question
 
-Does a neural network whose recurrent topology is constrained by a Drosophila
-connectome show stronger systematic generalization on symbolic physics and mathematics
-tasks than matched random graphs and conventional neural networks?
+Does connectome-constrained recurrent topology affect transfer of physics/mathematics
+abstractions relative to matched control topologies and conventional neural networks?
 
-This project tests operational behavior only. It does not claim that a fly, its brain,
-or a connectome-constrained model “understands” mathematics.
+This is an operational model comparison. It does not test whether a fly, its brain, or a
+connectome “understands mathematics,” and topology-only performance cannot establish a
+biological causal mechanism.
 
-## Confirmatory hypotheses
+## Staged scope
 
-- **H1:** A trainable connectome RNN exceeds a degree/size-matched random-graph RNN on
-  the primary metric under matched data, optimization, parameter budget, and seeds.
-- **H2:** A fixed connectome reservoir exceeds a matched random-graph reservoir on the
-  primary metric under the same readout and reservoir-scale selection procedure.
-- **H3:** Any connectome advantage remains detectable across symbol renaming, numerical
-  extrapolation, equivalent forms, rearranged equations, distractors, unseen templates,
-  and compositions of known rules.
+The first MVP is **numeric regression only**. Targets must parse to finite floats. The
+implemented output measures are MAE, RMSE, mean relative error, and tolerance accuracy
+with declared absolute/relative tolerances. Symbolic target prediction and symbolic
+equivalence scoring are a future stage; they must not be mixed into MVP results.
 
-The null for each comparison is no paired performance advantage across seeds/templates.
+The UCI Energy Efficiency pilot validates the end-to-end numeric research path. Its
+small synthetic graph is a systems pilot, not a confirmatory connectome experiment.
 
-## Primary outcome
+## Confirmatory hypotheses for a later approved study
 
-**Exact solution rate on compositional held-out-template OOD split.**
+- **H1:** A trainable connectome RNN exceeds a degree/size-matched topology control on
+  numeric transfer under matched data, optimizer, parameter budget, and seeds.
+- **H2:** A fixed connectome reservoir exceeds a matched random-graph reservoir under
+  the same readout and reservoir-scale selection procedure.
+- **H3:** Any topology advantage remains detectable across numerical extrapolation,
+  renamed variables, equivalent numeric forms, equation rearrangements, distractors,
+  unseen templates, and compositions of rules seen during training.
 
-Exact match is computed from canonical answers. SymPy-equivalent accuracy is a named
-secondary metric, never folded into a custom “abstraction score.”
+The null for each comparison is no paired performance advantage across declared
+seeds/templates.
 
-## Models and controls
+## Primary outcomes by dataset stage
+
+For synthetic mathematical tasks, the configured primary outcome is tolerance accuracy
+on the compositional held-out-template OOD split. For the UCI technical pilot, it is
+tolerance accuracy on `held_out_geometry_ood`: entire geometry groups are excluded from
+training and the original feature-only prompts are not transformed. The UCI outcome must
+not be described as mathematical or compositional OOD. Absolute and relative tolerances
+are frozen in the resolved configuration. MAE, RMSE, mean relative error, and sample
+efficiency are secondary. No custom aggregate “abstraction score” is used.
+
+## Models and graph controls
 
 - FixedConnectomeReservoir
 - TrainableConnectomeRNN
 - RandomGraphReservoir
 - GRU baseline
 - MLP baseline
-- Graph controls: degree-preserving rewiring, matched Erdos-Renyi, shuffled weights,
-  and shuffled directions
+- Graph variants: `real`, `degree_preserving`, `weight_shuffled`,
+  `direction_shuffled`, and `er_random`
 
-Where feasible, comparisons match node count, edge count, hidden width, readout,
-training examples, optimizer schedule, early-stopping rule, and random seeds. Parameter
-counts are always reported; unavoidable mismatches are disclosed rather than hidden.
+Controls preserve node count, edge count, edge-weight multiset, and the exact input/output
+node mappings. Degree-preserving and ER variants use explicitly declared directed
+multigraph null models so that construction remains linear in edge count. Parameter
+counts and unavoidable mismatches are reported.
 
 ## Splits and leakage control
 
-Every example carries immutable `source_id` and `template_id`. A template assigned to a
-held-out split cannot appear in training, including transformed variants. Composite OOD
-examples use only transformation rules seen during training while withholding their
-specific template composition. Split manifests and content hashes are recorded.
+Each example has immutable `source_id` and `template_id`. Whole held-out templates or UCI
+geometry groups never occur in training. UCI test prompts are copied unchanged and never
+receive Y1 through transformations. Manifests contain dataset name/version, strategy,
+all IDs by split, seed, exact selection rules, source-ID SHA256, and manifest SHA256. Row
+order cannot change a split, and an existing manifest is reused only when its content
+matches exactly.
+
+## Resource and execution policy
+
+Every confirmed run is preceded by an estimate using nodes, edges, batch size, sequence
+length, model state, activation state, dataset size, and configured RAM/VRAM headroom.
+The run stops before training if the estimate is unsafe or CUDA is missing. `paper_gpu`
+also needs explicit acceptance of the printed estimate and the separate heavy-run gate.
 
 ## Statistical analysis
 
 - Aggregate first by `template_id`, then across templates/seeds.
 - Report bootstrap confidence intervals with the resampling unit stated.
 - Use paired permutation tests for paired model/control outcomes.
-- Apply Holm correction within each declared family of comparisons.
-- Report sample-efficiency curves as tidy records keyed by model, seed, split, and
-  number of training examples.
+- Apply Holm correction within each preregistered comparison family.
+- Retain seed-level values, failures, negative findings, and sample-efficiency records.
 
-Analyses distinguish confirmatory from exploratory results. Effect sizes, intervals,
-seed-level values, failures, and negative findings are retained. No causal or biological
-claim follows from a topology-only performance difference.
+Confirmatory and exploratory results remain separate. A topology effect is reported as a
+model result, not as animal cognition or biological explanation.
 
 ## Reproducibility contract
 
-Runs record resolved configuration, Git state, environment/hardware, seeds, dependency
-versions, and hashes for data, graph, and configuration. Results are append-only by run
-ID. The laptop `local_cpu` profile is a smoke-scale path; claims require preregistered,
-multi-seed `paper_gpu` runs performed manually on suitable hardware.
-
+Runs record resolved config, Git state, environment/hardware, seeds, pinned dependency
+versions, and SHA256 hashes for data, graph, configuration, and split manifest. Graphs use
+binary NPZ with streamed byte hashing. Results are append-only by run ID. Raw datasets and
+licensed connectome exports are neither committed nor redistributed by this project.

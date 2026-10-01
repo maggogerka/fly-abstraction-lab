@@ -1,0 +1,36 @@
+profile: paper_gpu
+seed: 1701
+task:
+  primary_split: test_held_out_geometry_ood
+  primary_metric_name: Tolerance accuracy on held-out building-geometry OOD
+data:
+  dataset: uci_energy_efficiency
+  version: "UCI-242-2024-02-26"
+  path: data/processed/uci_energy_efficiency.jsonl
+  max_examples: 768
+  sequence_length: 96
+  split_strategy: held_out_geometry
+graph:
+  kind: flywire_fafb_v783
+  path: data/processed/flywire_fafb_v783.npz
+  variant: real
+  max_graph_nodes: 5000
+  expected_num_nodes: 5000
+  expected_num_edges: 500000
+model:
+  name: trainable_connectome_rnn
+  hidden_size: 5000
+training:
+  max_epochs: 20
+  batch_size: 4
+  num_workers: 4
+  checkpoints: true
+runtime:
+  device: cuda
+  torch_threads: 8
+  mixed_precision: true
+resource_guard:
+  max_ram_fraction: 0.70
+  max_vram_fraction: 0.70
+  require_explicit_acceptance: true
+

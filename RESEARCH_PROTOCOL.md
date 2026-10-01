@@ -32,12 +32,15 @@ small synthetic graph is a systems pilot, not a confirmatory connectome experime
 The null for each comparison is no paired performance advantage across declared
 seeds/templates.
 
-## Primary outcome
+## Primary outcomes by dataset stage
 
-**Tolerance accuracy on the compositional held-out-template OOD split**, with absolute
-and relative tolerances frozen in the resolved configuration. MAE, RMSE, mean relative
-error, transformation-specific outcomes, and sample efficiency are secondary. No custom
-aggregate “abstraction score” is used.
+For synthetic mathematical tasks, the configured primary outcome is tolerance accuracy
+on the compositional held-out-template OOD split. For the UCI technical pilot, it is
+tolerance accuracy on `held_out_geometry_ood`: entire geometry groups are excluded from
+training and the original feature-only prompts are not transformed. The UCI outcome must
+not be described as mathematical or compositional OOD. Absolute and relative tolerances
+are frozen in the resolved configuration. MAE, RMSE, mean relative error, and sample
+efficiency are secondary. No custom aggregate “abstraction score” is used.
 
 ## Models and graph controls
 
@@ -56,10 +59,12 @@ counts and unavoidable mismatches are reported.
 
 ## Splits and leakage control
 
-Each example has immutable `source_id` and `template_id`. Whole held-out templates never
-occur in training. Manifests contain dataset name/version, all IDs by split, seed, exact
-selection rules, source-ID SHA256, and manifest SHA256. Row order cannot change a split,
-and an existing manifest is reused only when its content matches exactly.
+Each example has immutable `source_id` and `template_id`. Whole held-out templates or UCI
+geometry groups never occur in training. UCI test prompts are copied unchanged and never
+receive Y1 through transformations. Manifests contain dataset name/version, strategy,
+all IDs by split, seed, exact selection rules, source-ID SHA256, and manifest SHA256. Row
+order cannot change a split, and an existing manifest is reused only when its content
+matches exactly.
 
 ## Resource and execution policy
 

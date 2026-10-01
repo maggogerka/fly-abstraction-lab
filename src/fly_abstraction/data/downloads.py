@@ -50,6 +50,10 @@ def download_registered_dataset(record: DatasetRecord, root: Path) -> tuple[Path
             "bytes": size,
             "sha256": sha256,
             "checksum_policy": record.checksum_policy,
+            "accepted_records": 0,
+            "rejected_records": 0,
+            "rejection_reasons": {},
+            "record_count_status": "not evaluated during byte download",
             "downloaded_at_utc": datetime.now(UTC).isoformat(),
         }
         manifest_temporary.write_text(

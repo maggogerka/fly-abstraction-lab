@@ -30,6 +30,7 @@ def build_split_manifest(
     seed: int,
     held_out_template_fraction: float,
     validation_fraction: float,
+    split_strategy: str = "held_out_template_compositional",
 ) -> dict[str, Any]:
     if not 0 < held_out_template_fraction < 1 or not 0 < validation_fraction < 1:
         raise ValueError("Split fractions must be between zero and one")
@@ -54,15 +55,26 @@ def build_split_manifest(
     validation_ids = sorted(ranked_train[:validation_count])
     validation_set = set(validation_ids)
     train_ids = sorted(value for value in train_pool if value not in validation_set)
+    if split_strategy == "held_out_template_compositional":
+        test_split = "test_compositional_ood"
+        held_out_rule = "whole template IDs ranked by SHA256(seed, template_id)"
+        test_transform = "compositional_split"
+    elif split_strategy == "held_out_geometry":
+        test_split = "test_held_out_geometry_ood"
+        held_out_rule = "whole building geometry IDs ranked by SHA256(seed, template_id)"
+        test_transform = "none; preserve the original prompt exactly"
+    else:
+        raise ValueError(f"Unknown split strategy: {split_strategy}")
     rules = {
-        "held_out": "whole template IDs ranked by SHA256(seed, template_id)",
+        "strategy": split_strategy,
+        "held_out": held_out_rule,
         "held_out_template_fraction": held_out_template_fraction,
         "validation": "source IDs in the remaining templates ranked by SHA256(seed, source_id)",
         "validation_fraction": validation_fraction,
-        "test_transform": "compositional_split",
+        "test_transform": test_transform,
     }
     payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "dataset": dataset,
         "dataset_version": dataset_version,
         "seed": seed,
@@ -71,7 +83,7 @@ def build_split_manifest(
         "splits": {
             "train": train_ids,
             "validation": validation_ids,
-            "test_compositional_ood": sorted(test_ids),
+            test_split: sorted(test_ids),
         },
     }
     payload["sha256"] = sha256_json(payload)
@@ -116,8 +128,17 @@ def apply_split_manifest(
         replace(by_id[source_id], split="validation")
         for source_id in manifest["splits"]["validation"]
     ]
-    test = [
-        compositional_split(held_out_template(by_id[source_id], seed), seed)
-        for source_id in manifest["splits"]["test_compositional_ood"]
-    ]
+    strategy = manifest.get("rules", {}).get("strategy", "held_out_template_compositional")
+    if strategy == "held_out_template_compositional":
+        test = [
+            compositional_split(held_out_template(by_id[source_id], seed), seed)
+            for source_id in manifest["splits"]["test_compositional_ood"]
+        ]
+    elif strategy == "held_out_geometry":
+        test = [
+            replace(by_id[source_id], split="test_held_out_geometry_ood")
+            for source_id in manifest["splits"]["test_held_out_geometry_ood"]
+        ]
+    else:
+        raise ValueError(f"Unknown split strategy in manifest: {strategy}")
     return train, validation, test

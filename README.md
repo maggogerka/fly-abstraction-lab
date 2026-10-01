@@ -10,9 +10,11 @@ a model difference would not establish animal cognition or a biological causal m
 The implemented task mode is finite numeric regression (`task.mode: numeric`). Every
 target is parsed and validated before encoding; strings that are not numbers and
 `NaN`/`Inf` are rejected. Reported metrics are MAE, RMSE, mean relative error, and
-tolerance accuracy. The primary pilot outcome is tolerance accuracy on the compositional
-held-out-template OOD split. Symbolic target generation/scoring is a separately marked
-future stage and is not represented as working support.
+tolerance accuracy. Tiny synthetic tasks retain a compositional held-out-template smoke
+split. UCI uses a separate `held_out_geometry` split: complete building-geometry groups
+are withheld, test prompts stay byte-for-byte unchanged, and Y1 is never copied into an
+input or expression field. This is a technical geometry OOD check, not mathematical or
+compositional OOD. Symbolic scoring remains a future stage.
 
 Every split is stored as a deterministic manifest containing example IDs, dataset
 version, seed, explicit rules, and SHA256. Repeating the same inputs and rules reuses an
@@ -51,10 +53,19 @@ does not enter the training function, and creates no run directory. See
 
 ## RTX research PC
 
-Use [RUN_RESEARCH_PC.md](RUN_RESEARCH_PC.md). The intended order is image build,
-`doctor-gpu`, `smoke-gpu`, data preparation, pilot dry-run, then a separately confirmed
-pilot. `smoke-gpu` performs exactly one tiny forward/backward under autocast, with no
-optimizer and no parameter update.
+On a clean 64-bit Windows PC, clone or unpack the repository and double-click
+[`START_HERE.cmd`](START_HERE.cmd). It checks disk, the NVIDIA driver, WSL2, Git, Docker
+Desktop, Compose, and the Docker engine; then it builds the digest-pinned image and runs
+`doctor-gpu` plus `smoke-gpu`. Logs go to `results/diagnostics/`. Git or Docker Desktop
+can be offered through `winget` only after an exact typed confirmation. The NVIDIA driver
+is never installed automatically.
+
+No host Python, PyTorch, CUDA Toolkit, or cuDNN installation is required. Those components
+stay inside the pinned Docker image. Dataset download and training are separate menu
+actions and never run during guided setup. See [FRIEND_QUICKSTART_RU.md](FRIEND_QUICKSTART_RU.md)
+for the short handoff and [RUN_RESEARCH_PC.md](RUN_RESEARCH_PC.md) for exact manual commands.
+`smoke-gpu` performs exactly one tiny forward/backward under autocast, with no optimizer
+or parameter update.
 
 `paper_gpu` is deliberately blocked until all of the following are present:
 
@@ -89,7 +100,27 @@ Convert the confirmed CSV to validated numeric JSONL with:
 python -m fly_abstraction data prepare-uci-energy
 ```
 
+Preparation writes `.manifest.json` and `.rejected.jsonl` beside the JSONL, including
+source URL, version, license, raw/prepared SHA256, accepted/rejected counts, and rejection
+reasons. The pilot refuses a missing manifest, a version/hash mismatch, or anything other
+than the complete validated 768-row source. UCI is only an end-to-end systems pilot; it
+is not the mathematical benchmark.
 No raw or prepared real data is committed.
+
+The next mathematical-data stage is a finite-numeric subset of DeepMind Mathematics v1.0,
+pinned to official source commit `427f45075f84b8b9774950196ad63867ca20ffb3` (Apache-2.0).
+The official README links a GCS browser but does not publish one pinned direct archive URL
+and checksum, so this project deliberately has no automatic DeepMind download. After the
+user independently obtains an official local archive/directory, preparation is offline:
+
+```text
+python -m fly_abstraction data prepare-deepmind-numeric --source data/raw/deepmind/official-v1.tar.gz
+```
+
+Only answers that parse directly to finite numbers are retained. `train-easy`,
+`train-medium`, `train-hard`, `interpolate`, and `extrapolate` stay in separate files; the
+manifest records modules, filter statistics, rejected-record SHA256, and source SHA256.
+DeepMind is not wired into automatic pilot training.
 
 ## Graphs and controls
 
@@ -115,8 +146,9 @@ python -m fly_abstraction graph convert-flywire --edges data/raw/flywire/authori
 ```
 
 The converter streams the CSV through an on-disk SQLite aggregation, writes NPZ plus a
-CSV node map, records the source SHA256, and refuses overwrite. It does not bypass
-FlyWire authentication or data-use terms.
+CSV node map and sidecar provenance manifest, records SHA256 and accepted/rejected row
+counts, and refuses overwrite. It does not bypass FlyWire authentication or data-use
+terms.
 
 ## Models and artifacts
 
@@ -128,6 +160,8 @@ point.
 Confirmed runs are append-only under `results/<run_id>/` and include resolved config,
 Git/environment/hardware manifest, hashes for data/config/graph/split, history,
 predictions, metrics, summary, and an optional checkpoint.
+Best checkpoints are epoch-consistent snapshots: model, optimizer, scaler, epoch, and
+best validation loss are captured together and restored together on resume.
 
 ## Development checks
 
@@ -138,6 +172,8 @@ pytest -q
 python -m fly_abstraction doctor
 python -m fly_abstraction --profile smoke_cpu show-config
 python -m fly_abstraction --profile smoke_cpu train
+python -m fly_abstraction --profile pilot_gpu train
+python -m fly_abstraction data download deepmind_mathematics
 docker compose config --quiet
 docker buildx build --check --file Dockerfile.cpu .
 docker buildx build --check --file Dockerfile.gpu .

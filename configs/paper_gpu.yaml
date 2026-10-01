@@ -1,11 +1,15 @@
 profile: paper_gpu
 seed: 1701
+task:
+  primary_split: test_held_out_geometry_ood
+  primary_metric_name: Tolerance accuracy on held-out building-geometry OOD
 data:
   dataset: uci_energy_efficiency
   version: "UCI-242-2024-02-26"
   path: data/processed/uci_energy_efficiency.jsonl
   max_examples: 768
   sequence_length: 96
+  split_strategy: held_out_geometry
 graph:
   kind: flywire_fafb_v783
   path: data/processed/flywire_fafb_v783.npz

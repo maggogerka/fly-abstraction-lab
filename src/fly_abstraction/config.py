@@ -45,6 +45,10 @@ GRAPH_VARIANTS = {
     "direction_shuffled",
     "er_random",
 }
+SPLIT_STRATEGIES = {
+    "held_out_template_compositional": "test_compositional_ood",
+    "held_out_geometry": "test_held_out_geometry_ood",
+}
 
 
 class ConfigError(ValueError):
@@ -137,6 +141,20 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ConfigError("Metric tolerances cannot be negative")
     if float(metrics["relative_epsilon"]) <= 0:
         raise ConfigError("task.metrics.relative_epsilon must be positive")
+    split_strategy = config["data"].get("split_strategy")
+    if split_strategy not in SPLIT_STRATEGIES:
+        raise ConfigError(
+            f"Unknown data.split_strategy={split_strategy!r}; "
+            f"choose one of {sorted(SPLIT_STRATEGIES)}"
+        )
+    expected_primary_split = SPLIT_STRATEGIES[split_strategy]
+    if config["task"].get("primary_split") != expected_primary_split:
+        raise ConfigError(
+            "task.primary_split must match data.split_strategy: "
+            f"expected {expected_primary_split!r}"
+        )
+    if not str(config["task"].get("primary_metric_name", "")).strip():
+        raise ConfigError("task.primary_metric_name cannot be empty")
     if config["profile"] == "paper_gpu" and not config["resource_guard"].get(
         "require_explicit_acceptance"
     ):

@@ -5,12 +5,14 @@ from __future__ import annotations
 import csv
 import math
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from fly_abstraction.data.registry import get_dataset
 from fly_abstraction.data.schema import MathProblem
-from fly_abstraction.utils import read_jsonl, write_jsonl
+from fly_abstraction.utils import read_jsonl, sha256_file, write_json, write_jsonl
 
 
 class DatasetAdapter(ABC):
@@ -120,7 +122,26 @@ class TinyDatasetAdapter(DatasetAdapter):
 
     @classmethod
     def prepare(cls, path: Path, count: int = 100, seed: int = 17) -> Path:
-        write_jsonl(path, (problem.to_dict() for problem in cls.generate(count, seed)))
+        problems = cls.generate(count, seed)
+        manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+        if manifest_path.exists():
+            raise FileExistsError(f"Refusing to overwrite existing manifest: {manifest_path}")
+        write_jsonl(path, (problem.to_dict() for problem in problems))
+        record = get_dataset("tiny")
+        write_json(
+            manifest_path,
+            {
+                "dataset": "tiny",
+                "source_url": record.url,
+                "version": record.version,
+                "license": record.license,
+                "seed": seed,
+                "sha256": sha256_file(path),
+                "accepted_records": len(problems),
+                "rejected_records": 0,
+                "rejection_reasons": {},
+            },
+        )
         return path
 
 
@@ -150,7 +171,7 @@ class UCIEnergyEfficiencyAdapter(DatasetAdapter):
             template_id=f"uci-energy-shape:{shape}",
             prompt=f"Predict building heating load from {features}",
             answer=format(values["Y1"], ".12g"),
-            expression=format(values["Y1"], ".12g"),
+            expression="numeric_target_unexposed",
             target_mode="numeric",
             numeric_values=tuple(values[key] for key in self.feature_names),
             metadata={
@@ -164,7 +185,14 @@ class UCIEnergyEfficiencyAdapter(DatasetAdapter):
     def prepare(cls, source: Path, output: Path) -> Path:
         if not source.is_file():
             raise FileNotFoundError(f"Confirmed UCI CSV is missing: {source}")
+        manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+        rejected_path = output.with_suffix(output.suffix + ".rejected.jsonl")
+        for target in (output, manifest_path, rejected_path):
+            if target.exists():
+                raise FileExistsError(f"Refusing to overwrite existing file: {target}")
         problems: list[MathProblem] = []
+        rejected: list[dict[str, Any]] = []
+        rejection_reasons: Counter[str] = Counter()
         with source.open(encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)
             required = {*cls.feature_names, "Y1", "Y2"}
@@ -172,10 +200,37 @@ class UCIEnergyEfficiencyAdapter(DatasetAdapter):
                 raise ValueError(f"UCI CSV must contain columns {sorted(required)}")
             for index, row in enumerate(reader):
                 row["row_id"] = str(index)
-                problems.append(cls().adapt(row))
-        if len(problems) != 768:
-            raise ValueError(f"Expected 768 UCI rows, got {len(problems)}")
+                try:
+                    problems.append(cls().adapt(row))
+                except (KeyError, TypeError, ValueError) as exc:
+                    reason = type(exc).__name__
+                    rejection_reasons[reason] += 1
+                    rejected.append({"row_id": index, "reason": reason, "detail": str(exc)})
+        if not problems:
+            raise ValueError("UCI preparation rejected every row")
         save_problems(output, problems)
+        write_jsonl(rejected_path, rejected)
+        record = get_dataset("uci_energy_efficiency")
+        write_json(
+            manifest_path,
+            {
+                "dataset": "uci_energy_efficiency",
+                "source_url": record.download_url,
+                "version": record.version,
+                "license": record.license,
+                "source_path": str(source),
+                "source_sha256": sha256_file(source),
+                "prepared_sha256": sha256_file(output),
+                "accepted_records": len(problems),
+                "rejected_records": len(rejected),
+                "rejection_reasons": dict(sorted(rejection_reasons.items())),
+                "expected_official_rows": 768,
+                "official_row_count_complete": len(problems) == 768 and not rejected,
+                "rejected_manifest": str(rejected_path),
+                "target": "Y1 heating load",
+                "input_columns": list(cls.feature_names),
+            },
+        )
         return output
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,7 +34,7 @@ from fly_abstraction.models.encoding import CharacterEncoder
 from fly_abstraction.resources import enforce_resource_guard, estimate_resources
 from fly_abstraction.training.artifacts import RunArtifacts, build_manifest
 from fly_abstraction.training.metrics import evaluate_records
-from fly_abstraction.utils import read_jsonl, set_seeds
+from fly_abstraction.utils import read_jsonl, set_seeds, sha256_file
 
 
 class EncodedDataset(Dataset[dict[str, torch.Tensor]]):
@@ -71,6 +73,21 @@ def _load_splits(
     path = Path(config["data"]["path"])
     if not path.is_file():
         raise FileNotFoundError(f"Prepared data not found: {path}; run data prepare-tiny first")
+    if config["data"]["dataset"] == "uci_energy_efficiency":
+        manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+        if not manifest_path.is_file():
+            raise FileNotFoundError(
+                f"Prepared UCI provenance is missing: {manifest_path}; run data prepare-uci-energy"
+            )
+        provenance = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if provenance.get("version") != config["data"]["version"]:
+            raise ValueError("Prepared UCI version does not match the configured version")
+        if not provenance.get("official_row_count_complete"):
+            raise ValueError(
+                "Prepared UCI is incomplete or contains rejected rows; inspect its manifest"
+            )
+        if provenance.get("prepared_sha256") != sha256_file(path):
+            raise ValueError("Prepared UCI SHA256 does not match its provenance manifest")
     records = read_jsonl(path)[: config["data"]["max_examples"]]
     if config["data"]["dataset"] == "tiny":
         problems = [TinyDatasetAdapter().adapt(record) for record in records]
@@ -83,6 +100,7 @@ def _load_splits(
         seed=int(config["seed"]),
         held_out_template_fraction=float(config["data"]["held_out_template_fraction"]),
         validation_fraction=float(config["data"]["validation_fraction"]),
+        split_strategy=str(config["data"]["split_strategy"]),
     )
     manifest_path = materialize_split_manifest(Path(config["data"]["split_manifest_dir"]), manifest)
     train, validation, test = apply_split_manifest(problems, manifest)
@@ -174,6 +192,36 @@ def _move(batch: dict[str, torch.Tensor], device: torch.device) -> dict[str, tor
     return {key: value.to(device) for key, value in batch.items()}
 
 
+def _clone_state_to_cpu(value: Any) -> Any:
+    """Detach a nested PyTorch state snapshot from later optimizer/model mutation."""
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().clone()
+    if isinstance(value, dict):
+        return {key: _clone_state_to_cpu(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clone_state_to_cpu(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_state_to_cpu(item) for item in value)
+    return copy.deepcopy(value)
+
+
+def _checkpoint_snapshot(
+    model: MathModel,
+    optimizer: torch.optim.Optimizer,
+    scaler: torch.amp.GradScaler,
+    *,
+    epoch: int,
+    validation_loss: float,
+) -> dict[str, Any]:
+    return {
+        "model": _clone_state_to_cpu(model.state_dict()),
+        "optimizer": _clone_state_to_cpu(optimizer.state_dict()),
+        "scaler": _clone_state_to_cpu(scaler.state_dict()),
+        "epoch": epoch,
+        "best_validation_loss": validation_loss,
+    }
+
+
 @torch.no_grad()
 def _evaluate_loader(
     model: MathModel,
@@ -235,8 +283,10 @@ def train_experiment(
         weight_decay=float(training["weight_decay"]),
     )
     use_amp = bool(config["runtime"]["mixed_precision"]) and device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     start_epoch = 0
+    best_validation = float("inf")
+    best_checkpoint: dict[str, Any] | None = None
     if resume:
         checkpoint = torch.load(resume, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model"])
@@ -244,6 +294,19 @@ def train_experiment(
         if "scaler" in checkpoint:
             scaler.load_state_dict(checkpoint["scaler"])
         start_epoch = int(checkpoint["epoch"]) + 1
+        best_validation = float(checkpoint.get("best_validation_loss", float("inf")))
+        best_checkpoint = _checkpoint_snapshot(
+            model,
+            optimizer,
+            scaler,
+            epoch=int(checkpoint["epoch"]),
+            validation_loss=best_validation,
+        )
+    if start_epoch >= int(training["max_epochs"]):
+        raise ValueError(
+            f"Resume checkpoint is already at epoch {start_epoch - 1}; "
+            "increase training.max_epochs to continue"
+        )
 
     identifier = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     artifacts = RunArtifacts(Path(config["output"]["root"]), identifier)
@@ -261,9 +324,7 @@ def train_experiment(
     )
 
     history: list[dict[str, Any]] = []
-    best_validation = float("inf")
     stale_epochs = 0
-    best_state: dict[str, torch.Tensor] | None = None
     for epoch in range(start_epoch, int(training["max_epochs"])):
         model.train()
         epoch_losses: list[float] = []
@@ -290,38 +351,43 @@ def train_experiment(
         if validation_loss < best_validation:
             best_validation = validation_loss
             stale_epochs = 0
-            best_state = {
-                key: value.detach().cpu().clone() for key, value in model.state_dict().items()
-            }
+            best_checkpoint = _checkpoint_snapshot(
+                model,
+                optimizer,
+                scaler,
+                epoch=epoch,
+                validation_loss=validation_loss,
+            )
         else:
             stale_epochs += 1
         if stale_epochs >= int(training["early_stopping_patience"]):
             break
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
+    if best_checkpoint is None:
+        raise RuntimeError("Training did not produce a checkpointable epoch")
+    model.load_state_dict(best_checkpoint["model"])
+    optimizer.load_state_dict(best_checkpoint["optimizer"])
+    scaler.load_state_dict(best_checkpoint["scaler"])
     test_loss, predictions = _evaluate_loader(model, prepared.test_loader, device, True)
-    metrics = evaluate_records(predictions, **config["task"]["metrics"])
+    metrics = evaluate_records(
+        predictions,
+        primary_split=str(config["task"]["primary_split"]),
+        primary_metric_name=str(config["task"]["primary_metric_name"]),
+        **config["task"]["metrics"],
+    )
     metrics["test_loss"] = test_loss
     artifacts.write_history(history)
     artifacts.write_predictions(predictions)
     artifacts.write_json("metrics.json", metrics)
     if bool(training["checkpoints"]):
-        torch.save(
-            {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "scaler": scaler.state_dict(),
-                "epoch": history[-1]["epoch"],
-            },
-            artifacts.path / "checkpoint.pt",
-        )
+        torch.save(best_checkpoint, artifacts.path / "checkpoint.pt")
     artifacts.write_json(
         "summary.json",
         {
             "status": "completed",
             "run_id": identifier,
             "epochs_completed": len(history),
+            "best_epoch": int(best_checkpoint["epoch"]),
             "best_validation_loss": best_validation,
             "primary_metric": metrics["primary_metric"],
             "parameter_counts": model.parameter_counts(),

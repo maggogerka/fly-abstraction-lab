@@ -57,6 +57,8 @@ def evaluate_records(
     absolute_tolerance: float = 0.1,
     relative_tolerance: float = 0.01,
     relative_epsilon: float = 1.0e-8,
+    primary_split: str = "test_compositional_ood",
+    primary_metric_name: str = "Tolerance accuracy on compositional held-out-template OOD",
 ) -> dict[str, Any]:
     """Evaluate numeric targets only; symbolic scoring is intentionally not implemented."""
     if absolute_tolerance < 0 or relative_tolerance < 0 or relative_epsilon <= 0:
@@ -87,10 +89,9 @@ def evaluate_records(
         )
         for split, values in sorted(by_split.items())
     }
-    result["primary_metric_name"] = "Tolerance accuracy on compositional held-out-template OOD"
-    result["primary_metric"] = (
-        result["by_split"].get("test_compositional_ood", {}).get("tolerance_accuracy")
-    )
+    result["primary_metric_name"] = primary_metric_name
+    result["primary_split"] = primary_split
+    result["primary_metric"] = result["by_split"].get(primary_split, {}).get("tolerance_accuracy")
     result["tolerances"] = {
         "absolute": absolute_tolerance,
         "relative": relative_tolerance,

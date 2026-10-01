@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import torch
@@ -78,4 +79,9 @@ def test_local_flywire_conversion_aggregates_without_network(tmp_path: Path) -> 
     assert graph.num_edges == 2
     assert torch.equal(torch.sort(graph.edge_weight).values, torch.tensor([4.0, 5.0]))
     assert graph.manifest["release"] == "FAFB v783"
+    assert graph.manifest["accepted_records"] == 3
+    assert graph.manifest["rejected_records"] == 0
     assert output.with_suffix(".nodes.csv").is_file()
+    manifest = json.loads(output.with_suffix(".manifest.json").read_text(encoding="utf-8"))
+    assert manifest["prepared_sha256"]
+    assert manifest["license"]

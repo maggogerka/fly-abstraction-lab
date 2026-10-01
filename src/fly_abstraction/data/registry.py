@@ -27,12 +27,16 @@ class DatasetRecord:
 REGISTRY: dict[str, DatasetRecord] = {
     "deepmind_mathematics": DatasetRecord(
         name="DeepMind Mathematics Dataset",
-        url="https://github.com/google-deepmind/mathematics_dataset",
-        version="1.0.1",
+        url="https://console.cloud.google.com/storage/browser/mathematics-dataset",
+        version="1.0 @ source commit 427f45075f84b8b9774950196ad63867ca20ffb3",
         license="Apache-2.0",
         citation="Saxton et al., Analysing Mathematical Reasoning Abilities of Neural Models, 2019",
-        expected_bytes=2_000_000_000,
+        expected_bytes=20_000_000_000,
         adapter="DeepMindMathematicsAdapter",
+        checksum_policy=(
+            "local official archive only; preparation computes SHA256 because no pinned "
+            "official direct archive checksum is published in the repository README"
+        ),
     ),
     "srsd_feynman": DatasetRecord(
         name="SRSD-Feynman",

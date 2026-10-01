@@ -1,118 +1,146 @@
 # RTX 5090 research-PC workflow
 
-These are manual commands for a Windows/PowerShell host with 32 GB RAM, Docker Desktop,
-the NVIDIA Container Toolkit integration, and a driver new enough to run CUDA 12.8
-containers. They are not run by setup, tests, or CI.
+This workflow targets a clean 64-bit Windows 10/11 PC with RTX 5090 and 32 GB RAM.
+The host needs only an up-to-date NVIDIA driver, WSL2, Git (unless using a ZIP), and
+Docker Desktop with the WSL2 engine. Do **not** install host Python, PyTorch, CUDA Toolkit,
+or cuDNN: Python 3.11, PyTorch 2.7.1, CUDA 12.8, and cuDNN 9 are pinned inside Docker.
 
-## 1. Clone the exact branch
+No command in the setup/doctor/smoke path downloads datasets or trains a model.
+
+## Recommended Windows path
+
+Clone the branch or unpack its ZIP:
 
 ```text
-git clone https://github.com/maggogerka/fly-abstraction-lab.git
+git clone --branch feat/research-pc-readiness https://github.com/maggogerka/fly-abstraction-lab.git
 cd fly-abstraction-lab
-git switch feat/research-pc-readiness
-git rev-parse HEAD
-git status --short
 ```
 
-Keep the printed commit hash with the results. The worktree should be clean.
+Double-click `START_HERE.cmd`. The guided action:
 
-## 2. Build and inspect the pinned GPU environment
+1. checks Windows x64 and warns below 25 GB free disk;
+2. checks `nvidia-smi`, driver version, GPU and VRAM;
+3. checks WSL2, Git, Docker Desktop, Compose, and the Docker engine;
+4. offers missing Git/Docker via `winget` only after an exact confirmation;
+5. builds the digest-pinned `research-gpu` image;
+6. runs `doctor-gpu`, then the no-update `smoke-gpu`;
+7. writes complete logs under `results/diagnostics/` and opens the action menu.
 
-The Dockerfile uses the official PyTorch 2.7.1/CUDA 12.8/cuDNN 9 image pinned by digest
-and verifies that `sm_120` is compiled in.
+The NVIDIA driver is never installed automatically. If WSL2, Docker Desktop, or the
+driver was just installed/updated, reboot Windows when instructed and run `START_HERE.cmd`
+again. The script is idempotent; closing it does not remove `data/` or `results/`.
+
+The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
+UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot
+training. UCI download requires `DOWNLOAD UCI`; training requires `TRAIN PILOT`.
+
+To reopen only the menu:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\setup_friend_pc.ps1 -Action Menu
+```
+
+## Equivalent manual commands
+
+Build and check the pinned runtime:
 
 ```text
 docker compose --profile research build research-gpu
 New-Item -ItemType Directory -Force results\diagnostics
-docker compose --profile research run --rm research-gpu doctor-gpu | Tee-Object results\diagnostics\doctor-gpu.json
+docker compose --profile research run --rm research-gpu doctor-gpu | Tee-Object results\diagnostics\doctor-gpu.log
+docker compose --profile research run --rm research-gpu smoke-gpu | Tee-Object results\diagnostics\smoke-gpu.log
 ```
 
-Stop if `blackwell_ready` is false, CUDA is absent, the GPU name is unexpected, or VRAM
-is materially below the RTX 5090's expected capacity. Do not paper over a failed doctor
-with a different unpinned PyTorch install.
+Stop if `blackwell_ready` is false, CUDA is absent, the GPU is not the expected RTX 5090,
+or available VRAM is materially below expectation. `smoke-gpu` performs one tiny mixed-
+precision forward/backward and reports `optimizer_step: false`; it is not training.
 
-## 3. Run the no-training GPU smoke check
+## UCI technical pilot data
 
-```text
-docker compose --profile research run --rm research-gpu smoke-gpu | Tee-Object results\diagnostics\smoke-gpu.json
-```
-
-Expected fields are `forward: ok`, `backward: ok`, finite loss/gradient, and
-`optimizer_step: false`. This is one tiny forward/backward only.
-
-## 4. Prepare the real numeric pilot data
-
-Review official UCI metadata first; this makes no network data request:
+Review metadata first; this is network-free:
 
 ```text
 docker compose --profile research run --rm research-gpu data download uci_energy_efficiency
 ```
 
-After independently reviewing the URL, CC BY 4.0 license, expected size, and free disk,
-the human-authorized download is:
+Only after reviewing the official URL, CC BY 4.0 license, disk space, and checksum policy:
 
 ```text
 docker compose --profile research run --rm research-gpu data download uci_energy_efficiency --confirm-download
 docker compose --profile research run --rm research-gpu data prepare-uci-energy
 ```
 
-Retain `data/raw/uci_energy_efficiency/data.csv.download.json`. It records the SHA256 of
-the received official bytes. The UCI API does not publish an advance checksum; this is
-documented rather than replaced with an invented value.
+The download manifest pins the received bytes. Preparation creates
+`uci_energy_efficiency.jsonl.manifest.json` and `.rejected.jsonl` with source/version/
+license, raw and prepared SHA256, accepted/rejected counts, and reasons. UCI's API does
+not publish an advance digest, so no digest is invented.
+The pilot refuses to start if this preparation manifest is missing, incomplete, or does
+not match the configured version and prepared-file SHA256.
 
-## 5. Review the small pilot
+UCI is an end-to-end technical regression pilot, not a mathematical benchmark. Its
+`held_out_geometry` split excludes complete building-geometry groups, preserves original
+feature-only prompts, and never injects Y1. Its metric is named held-out geometry OOD,
+not mathematical or compositional OOD.
 
-`pilot_gpu` uses 768 numeric UCI examples and a 256-node synthetic graph. It validates
-the GPU/numeric/split/artifact path; by itself it is not evidence for a biological or
-connectome-topology claim.
+## Dry-run, then separately confirmed pilot
+
+`pilot_gpu` uses at most 768 UCI rows and a 128-node synthetic graph, matching the
+generator's hard bound. First inspect configuration and the resource estimate:
 
 ```text
 docker compose --profile research run --rm research-gpu --profile pilot_gpu show-config
 docker compose --profile research run --rm research-gpu --profile pilot_gpu train
 ```
 
-The second command must say `DRY-RUN COMPLETE` and display nodes, edges, batch, sequence
-length, estimated RAM/VRAM, and available memory. If it reports a guard issue, reduce the
-corresponding values; do not bypass the guard.
-
-## 6. Start the pilot only after review
-
-This is the only command below that trains:
+The second command must print `DRY-RUN COMPLETE`; it must not create a run. Only after
+reviewing nodes, edges, batch, sequence length, RAM, and VRAM may a human start training:
 
 ```text
 docker compose --profile research run --rm research-gpu --profile pilot_gpu train --confirm-train --run-id pilot_gpu_seed1701
 ```
 
-Do not reuse a run ID. Do not launch `paper_gpu` from this guide. The paper profile also
+Never reuse a run ID. Do not launch `paper_gpu` from this guide. That profile additionally
 requires `--confirm-heavy-run --accept-resource-estimate`, CUDA, and a prepared local
-FlyWire NPZ; it should be reviewed separately after the pilot.
+FlyWire NPZ.
 
-## Optional: authorized local FlyWire export
+## Next mathematical dataset (offline preparation only)
 
-The project does not access FlyWire. If the owner has already exported an authorized
-FAFB v783 aggregate with `pre_group,post_group,synapse_count` columns:
+DeepMind Mathematics v1.0 is pinned to official source commit
+`427f45075f84b8b9774950196ad63867ca20ffb3`. The official README links a GCS browser but
+does not provide a single pinned direct archive/checksum, so this project will not
+download it automatically. After independently obtaining an official local archive:
+
+```text
+docker compose --profile research run --rm research-gpu data prepare-deepmind-numeric --source data/raw/deepmind/official-v1.tar.gz
+```
+
+This keeps only directly parseable finite numeric answers and writes each official train,
+interpolation, and extrapolation split separately. It is not connected to pilot training.
+
+## Optional authorized local FlyWire export
+
+The project does not access FlyWire. If the owner already has an authorized FAFB v783
+aggregate with `pre_group,post_group,synapse_count` columns:
 
 ```text
 docker compose --profile research run --rm research-gpu graph convert-flywire --edges data/raw/flywire/authorized_v783_groups.csv --output data/processed/flywire_fafb_v783.npz
 ```
 
-The resulting NPZ and `.nodes.csv` remain local and must not be redistributed unless the
-source terms permit it.
+The NPZ, node map, and provenance manifest remain local. Do not redistribute them unless
+the source terms permit it.
 
 ## Return package after the pilot
 
 Send the repository owner:
 
-- `results/diagnostics/doctor-gpu.json`
-- `results/diagnostics/smoke-gpu.json`
-- the commit hash from `git rev-parse HEAD`
-- `data/raw/uci_energy_efficiency/data.csv.download.json`
-- `data/processed/splits/*.json`
-- from `results/pilot_gpu_seed1701/`: `config.resolved.yaml`, `run_manifest.json`,
-  `summary.json`, `metrics.json`, `history.csv`, and `predictions.jsonl`
-- `checkpoint.pt` only if model continuation is required (it is larger and is not
-  needed for a first metrics review)
-- the complete terminal error text instead of partial artifacts if the run stops
+- all files under `results/diagnostics/`, including `friend-setup.log` and the pilot log;
+- the commit from `git rev-parse HEAD` (or the ZIP filename/version);
+- `data/raw/uci_energy_efficiency/data.csv.download.json`;
+- `data/processed/uci_energy_efficiency.jsonl.manifest.json`;
+- the used manifest from `data/processed/splits/`;
+- from `results/<pilot_run_id>/`: `config.resolved.yaml`, `run_manifest.json`,
+  `summary.json`, `metrics.json`, `history.csv`, and `predictions.jsonl`;
+- complete error logs instead of partial conclusions if anything stops.
 
-Do not send licensed FlyWire raw exports or prepared connectomes without confirming that
-redistribution is allowed.
+Send `checkpoint.pt` only when continuation is needed. Do not send licensed FlyWire raw
+exports or prepared connectomes without redistribution permission.

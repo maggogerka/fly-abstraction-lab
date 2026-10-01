@@ -4,6 +4,8 @@ seed: 17
 deterministic: true
 task:
   mode: numeric
+  primary_split: test_compositional_ood
+  primary_metric_name: Tolerance accuracy on compositional held-out-template OOD
   metrics:
     absolute_tolerance: 0.1
     relative_tolerance: 0.01
@@ -15,6 +17,7 @@ data:
   max_examples: 1000
   held_out_template_fraction: 0.25
   validation_fraction: 0.2
+  split_strategy: held_out_template_compositional
   split_manifest_dir: data/processed/splits
   sequence_length: 96
 graph:

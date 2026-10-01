@@ -21,6 +21,9 @@ jobs:
       - run: python -m fly_abstraction doctor
       - run: python -m fly_abstraction --profile smoke_cpu show-config
       - run: python -m fly_abstraction --profile smoke_cpu train
+      - run: python -m fly_abstraction --profile pilot_gpu show-config
+      - run: python -m fly_abstraction --profile pilot_gpu train
+      - run: python -m fly_abstraction data download deepmind_mathematics
 
   docker-validate:
     runs-on: ubuntu-latest

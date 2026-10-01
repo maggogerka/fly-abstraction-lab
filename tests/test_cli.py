@@ -42,3 +42,16 @@ def test_registered_download_is_dry_without_confirmation(capsys) -> None:
 def test_cli_paths_cannot_escape_repository() -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         _relative_path("../outside")
+
+
+def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
+    root = Path(__file__).resolve().parents[1]
+    cmd = (root / "START_HERE.cmd").read_text(encoding="utf-8")
+    script = (root / "scripts" / "setup_friend_pc.ps1").read_text(encoding="utf-8-sig")
+    assert "setup_friend_pc.ps1" in cmd
+    assert "TRAIN PILOT" in script
+    assert "DOWNLOAD UCI" in script
+    assert "--confirm-download" in script
+    assert "--confirm-train" in script
+    assert "pip install" not in script
+    assert "CUDA Toolkit" in script

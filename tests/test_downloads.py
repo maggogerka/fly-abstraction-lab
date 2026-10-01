@@ -24,3 +24,5 @@ def test_confirmed_download_streams_and_records_sha256(tmp_path: Path, monkeypat
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["sha256"] == expected
     assert manifest["version"] == record.version
+    assert manifest["accepted_records"] == 0
+    assert manifest["rejection_reasons"] == {}

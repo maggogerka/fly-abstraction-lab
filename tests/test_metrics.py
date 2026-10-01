@@ -17,6 +17,23 @@ def test_numeric_metrics_are_named_and_finite() -> None:
     assert metrics["primary_metric"] == 1.0
 
 
+def test_geometry_ood_metric_is_not_labeled_compositional() -> None:
+    metrics = evaluate_records(
+        [
+            {
+                "prediction": 3.0,
+                "target": 3.0,
+                "split": "test_held_out_geometry_ood",
+            }
+        ],
+        primary_split="test_held_out_geometry_ood",
+        primary_metric_name="Tolerance accuracy on held-out building-geometry OOD",
+    )
+    assert metrics["primary_metric"] == 1.0
+    assert metrics["primary_split"] == "test_held_out_geometry_ood"
+    assert "compositional" not in metrics["primary_metric_name"].lower()
+
+
 @pytest.mark.parametrize("value", ["symbolic", float("nan"), float("inf")])
 def test_numeric_metrics_reject_invalid_values(value: object) -> None:
     with pytest.raises(ValueError):

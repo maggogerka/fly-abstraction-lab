@@ -1,4 +1,6 @@
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -83,3 +85,20 @@ def test_uci_adapter_rejects_non_finite_features() -> None:
     record.update({"Y1": "2", "Y2": "3", "row_id": "0", "X3": "NaN"})
     with pytest.raises(ValueError, match="finite"):
         UCIEnergyEfficiencyAdapter().adapt(record)
+
+
+def test_uci_preparation_records_filter_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "data.csv"
+    source.write_text(
+        "X1,X2,X3,X4,X5,X6,X7,X8,Y1,Y2\n1,2,3,4,5,6,7,8,9,10\n1,2,NaN,4,5,6,7,8,9,10\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "prepared.jsonl"
+    UCIEnergyEfficiencyAdapter.prepare(source, output)
+    manifest = json.loads(output.with_suffix(".jsonl.manifest.json").read_text(encoding="utf-8"))
+    assert manifest["accepted_records"] == 1
+    assert manifest["rejected_records"] == 1
+    assert manifest["rejection_reasons"] == {"ValueError": 1}
+    assert manifest["source_sha256"]
+    assert manifest["prepared_sha256"]
+    assert output.with_suffix(".jsonl.rejected.jsonl").is_file()

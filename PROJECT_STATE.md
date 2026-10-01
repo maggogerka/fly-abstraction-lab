@@ -1,91 +1,107 @@
 # Project state
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Current branch and scope
 
 - Working branch: `feat/research-pc-readiness`, created from `feat/research-mvp`.
+- Open PR: #1, `feat/research-pc-readiness` into `main`; merge is intentionally not
+  performed by this work.
 - Scientific question: whether connectome-constrained topology affects transfer of
   physics/mathematics abstractions relative to matched controls—not whether a fly brain
   literally understands mathematics.
-- Implemented MVP task: finite numeric regression only. Symbolic targets are explicitly
-  a future stage.
-- No training, real-data download, GPU task, Docker layer build, or result analysis was
-  run during this stage.
+- Implemented task: finite numeric regression only. Symbolic targets are a future stage.
+- No real-data download, Docker image build/pull, GPU command, pilot/paper training, or
+  experimental-result analysis was run. Pytest ran only the requested tiny CPU integration
+  epochs on an 8-node synthetic graph.
 
-## Implemented in this stage
+## Research-PC readiness implemented
 
-- Pinned Python/PyTorch/dependency environments with `requirements.lock` and
-  `requirements-cpu.lock`; pinned CPU and GPU base-image digests.
-- Updated GPU runtime to official PyTorch 2.7.1, CUDA 12.8, cuDNN 9 with `sm_120`
-  assertion for Blackwell/RTX 5090.
-- Added `doctor-gpu` and `smoke-gpu`; the latter performs one tiny mixed-precision
-  forward/backward without optimizer creation or parameter update.
-- Added `smoke_cpu`, `smoke_gpu`, and bounded `pilot_gpu` profiles. Reduced the former
-  paper profile to finite numeric data/5k graph nodes and added three independent gates:
-  confirmed training, heavy-run confirmation, and resource-estimate acceptance.
-- Added conservative RAM/VRAM estimation from graph nodes/edges, batch, sequence length,
-  activations, graph storage, and optimizer/model state. Both CLI and training API stop
-  unsafe runs before training; actual graph size is checked again after loading.
-- Enforced `task.mode: numeric`; invalid numeric strings and `NaN`/`Inf` now fail during
-  schema validation instead of entering tensors. Added MAE, RMSE, mean relative error,
-  and tolerance accuracy with configured tolerances.
-- Added deterministic order-independent split manifests with IDs, dataset/version, seed,
-  explicit rules, source-ID SHA256, and manifest SHA256. Existing manifests are reused
-  only when identical.
-- Added selectable graph variants: `real`, `degree_preserving`, `weight_shuffled`,
-  `direction_shuffled`, and `er_random`. Controls preserve edge/node counts, weights, and
-  identical input/output mappings; models now use those mappings explicitly.
-- Replaced large-graph JSON as the primary format with compressed NPZ. Graph hashing
-  streams tensor bytes without `.tolist()`. Random controls use tensor operations instead
-  of large Python edge lists/sets.
-- Added consent-gated UCI Energy Efficiency acquisition from the official pinned URL.
-  It requires `--confirm-download`, streams with a size cap, refuses overwrite, computes
-  SHA256, and records source/version/license/hash in an adjacent manifest. UCI does not
-  publish an advance digest in its API; this limitation is recorded explicitly.
-- Added UCI numeric preparation for 768 rows and a local-only FlyWire FAFB v783 converter
-  for authorized aggregated CSV exports. The converter uses on-disk SQLite aggregation,
-  NPZ output, a CSV node map, and source SHA256; it performs no network/authentication.
-- Expanded tests for numeric/finite targets, metrics, split reproducibility, graph
-  variants and I/O mappings, binary graph hashes, resource guard, CLI safety, local
-  FlyWire conversion, streaming download checksums, and GPU skip behavior.
-- CI now checks formatting, lint, unit tests, CLI doctor/config/train dry-run, Compose
-  syntax, and Dockerfile build checks without training or data downloads.
-- Updated README, research-PC/local runbooks, protocol, and operating rules.
+- CPU/GPU runtimes remain pinned by locks and image digests. The GPU image is official
+  PyTorch 2.7.1, CUDA 12.8, cuDNN 9 and asserts compiled `sm_120` support.
+- `pilot_gpu` now uses the generator-safe maximum of 128 nodes (expected 256 edges), with
+  an integration test that enters `prepare_experiment` and constructs the graph/loaders.
+- `doctor-gpu` reports Python, PyTorch, CUDA, GPU, compute capability, VRAM, mixed-
+  precision support and Blackwell readiness. `smoke-gpu` performs one tiny forward/
+  backward without optimizer creation or parameter update.
+- `START_HERE.cmd` and `scripts/setup_friend_pc.ps1` provide a clean-Windows path. They
+  check Windows x64, 25 GB disk headroom, `nvidia-smi`/driver/GPU/VRAM, WSL2, Git, Docker
+  Desktop, Compose, and the engine; optionally offer Git/Docker through exact-confirmation
+  `winget`; never install an NVIDIA driver; build the pinned image; run doctor/smoke; and
+  retain logs under `results/diagnostics`.
+- Host Python, PyTorch, CUDA Toolkit, and cuDNN are not required. Dataset and training menu
+  actions remain separate. UCI needs `DOWNLOAD UCI`; pilot training needs `TRAIN PILOT`.
+
+## Leakage, data, and reproducibility
+
+- UCI no longer stores Y1 in `expression`. Its deterministic `held_out_geometry` strategy
+  excludes complete geometry groups, copies test prompts unchanged, records all IDs/rules/
+  hashes in the split manifest, and reports a held-out building-geometry OOD metric. It is
+  explicitly not called mathematical or compositional OOD.
+- Tiny, UCI, and local FlyWire preparation now record source URL/description, version,
+  license/terms, SHA256, accepted/rejected counts, and rejection reasons. UCI additionally
+  writes a rejected-record JSONL. FlyWire remains local-only, streams aggregation through
+  SQLite, writes NPZ plus node mapping/provenance, and performs no authentication/network
+  access.
+- Added offline preparation of a strict finite-numeric subset of DeepMind Mathematics
+  v1.0, pinned to official source commit
+  `427f45075f84b8b9774950196ad63867ca20ffb3`. It accepts a local official directory,
+  tar/tar.gz/tgz, or ZIP; rejects unsafe archive paths; retains only plain finite numeric
+  answers; keeps `train-easy`, `train-medium`, `train-hard`, `interpolate`, and
+  `extrapolate` separate; and writes module/filter/rejected/source hashes. It is not part
+  of pilot training and has no invented automatic download URL.
+- Large connectomes remain compressed NPZ with streaming tensor/file hashing; graph
+  controls retain identical input/output mappings.
+
+## Training and checkpoint correctness
+
+- Resource estimates and guards still run before data/graph loading and again on actual
+  graph size, covering nodes, edges, batch, sequence length, approximate RAM, and VRAM.
+- Best checkpoints now snapshot model, optimizer, scaler, epoch, and validation loss
+  together. Resume restores that aligned snapshot; a checkpoint already at/above the
+  configured final epoch is rejected with an actionable message.
+- A full small CPU integration test checks `summary.json`, `metrics.json`, `history.csv`,
+  `predictions.jsonl`, `run_manifest.json`, and checkpoint/resume epoch/optimizer-step
+  alignment.
 
 ## Validation performed
 
-- `ruff format --check .`: passed (45 files formatted).
+- `ruff format --check .`: passed (49 files already formatted).
 - `ruff check .`: passed.
-- `pytest -q`: 40 passed, 1 skipped; the only skip is the Blackwell GPU smoke test because
+- `pytest -q`: 50 passed, 1 skipped. The only skip is the Blackwell GPU smoke test because
   this machine has CPU-only PyTorch/CUDA unavailable.
-- `doctor`: passed on Python 3.11.9; local PyTorch is 2.14.1+cpu and CUDA is correctly
-  unavailable. The target Docker environments remain pinned to PyTorch 2.7.1.
-- `show-config` and side-effect-free `train` dry-run passed for `smoke_cpu`; the dry-run
-  printed nodes, edges, batch, sequence length, RAM/VRAM estimates and created no run.
-- UCI download dry-run passed and performed no download.
+- `doctor`: passed on Python 3.11.9. The existing developer venv has PyTorch 2.14.1+cpu;
+  target Docker environments remain pinned to PyTorch 2.7.1.
+- `smoke_cpu` show-config and train dry-run: passed and created no run.
+- `pilot_gpu` show-config and train dry-run: passed; reported 128 nodes and
+  `held_out_geometry`; created no run.
+- DeepMind download command dry-run: passed and made no network data request.
 - `docker compose config --quiet`: passed.
-- Official image manifests were resolved without pulling layers: GPU digest
-  `sha256:c16f4c...e2a2`; CPU multi-platform digest `sha256:8fb099...c317`.
-- Local `docker buildx build --check` for both Dockerfiles could not connect because
-  Docker Desktop's Linux engine is not running. No daemon was started automatically;
-  equivalent checks are configured in CI.
+- Windows PowerShell 5.1 parser and required UTF-8 BOM check: passed. The setup script was
+  not executed because it would perform Docker/GPU host actions.
+- `git diff --check`: passed.
+- `docker buildx build --check` for both Dockerfiles was attempted but Docker Desktop's
+  Linux engine is not running, so the client could not connect. No daemon was started;
+  the same checks remain mandatory in CI.
 
 ## Known limitations
 
-- `smoke-gpu` and actual RTX 5090 behavior must be run on the friend's machine.
-- The UCI API exposes version/license/source metadata but no published pre-download
-  digest. The confirmed command pins the received bytes by SHA256; compare that manifest
-  between machines before using the dataset.
-- The pilot uses a small synthetic topology to validate the stack. Scientific graph
-  comparisons require an authorized local FlyWire export, declared variants/seeds, and
-  a separately approved experiment plan.
-- Directed degree-preserving and ER controls are multigraph null models; duplicates and
-  self-loops are documented where applicable and should be considered in interpretation.
-- Symbolic target training/evaluation is not implemented.
+- Actual RTX 5090 behavior, Windows guided setup, image build, `doctor-gpu`, `smoke-gpu`,
+  UCI acquisition, and the pilot must be run manually on the friend's PC.
+- The UCI API publishes no advance digest. Confirmed acquisition computes and records the
+  received SHA256; compare the manifest between machines.
+- UCI validates the technical pipeline only. A real mathematical-transfer result needs
+  the separately prepared mathematical dataset and an approved experiment plan.
+- The official DeepMind README exposes a GCS browser but no single version-pinned direct
+  archive/checksum. Preparation is therefore local-only and intentionally rejects
+  fractions/symbolic numeric forms such as `1/3`; expanding parsing needs a separate
+  reviewed protocol.
+- The pilot topology is synthetic. Scientific graph comparisons require an authorized
+  local FlyWire export and declared matched variants/seeds.
+- Symbolic target training/evaluation remains unimplemented.
 
 ## Next manual action
 
-On the RTX 5090 PC, follow `RUN_RESEARCH_PC.md`: clone the branch, build the pinned image,
-run `doctor-gpu`, run `smoke-gpu`, explicitly prepare UCI data, inspect the pilot dry-run,
-and only then decide whether to issue the confirmed pilot command.
+On the RTX 5090 PC, use `FRIEND_QUICKSTART_RU.md` or `RUN_RESEARCH_PC.md`: clone/unpack,
+run `START_HERE.cmd`, inspect diagnostics, separately confirm UCI download/preparation,
+run the pilot dry-run, then explicitly confirm the pilot only if all checks pass.

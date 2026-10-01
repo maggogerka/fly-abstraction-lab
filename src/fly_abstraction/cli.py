@@ -21,6 +21,7 @@ from fly_abstraction.config import (
     local_safety_violations,
 )
 from fly_abstraction.data.adapters import TinyDatasetAdapter, UCIEnergyEfficiencyAdapter
+from fly_abstraction.data.deepmind import prepare_deepmind_numeric
 from fly_abstraction.data.downloads import download_registered_dataset
 from fly_abstraction.data.registry import REGISTRY, get_dataset
 from fly_abstraction.diagnostics import gpu_report, run_gpu_smoke
@@ -128,6 +129,12 @@ def command_prepare_uci(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_prepare_deepmind(args: argparse.Namespace) -> int:
+    manifest = prepare_deepmind_numeric(args.source, args.output_dir)
+    print(f"Prepared finite numeric DeepMind subsets; manifest: {manifest}")
+    return 0
+
+
 def command_convert_flywire(args: argparse.Namespace) -> int:
     convert_local_flywire_export(args.edges, args.output)
     print(f"Converted authorized local export to {args.output}")
@@ -178,7 +185,17 @@ def command_evaluate(args: argparse.Namespace) -> int:
         return 0
     records = read_jsonl(args.predictions)
     config = _config(args)
-    print(json.dumps(evaluate_records(records, **config["task"]["metrics"]), indent=2))
+    print(
+        json.dumps(
+            evaluate_records(
+                records,
+                primary_split=str(config["task"]["primary_split"]),
+                primary_metric_name=str(config["task"]["primary_metric_name"]),
+                **config["task"]["metrics"],
+            ),
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -225,6 +242,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("data/processed/uci_energy_efficiency.jsonl"),
     )
     uci.set_defaults(handler=command_prepare_uci)
+    deepmind = data_commands.add_parser(
+        "prepare-deepmind-numeric",
+        help="filter a pre-downloaded official DeepMind v1.0 archive; no network access",
+    )
+    deepmind.add_argument("--source", type=_relative_path, required=True)
+    deepmind.add_argument(
+        "--output-dir",
+        type=_relative_path,
+        default=Path("data/processed/deepmind_mathematics_numeric_v1"),
+    )
+    deepmind.set_defaults(handler=command_prepare_deepmind)
 
     graph = commands.add_parser("graph")
     graph_commands = graph.add_subparsers(dest="graph_command", required=True)

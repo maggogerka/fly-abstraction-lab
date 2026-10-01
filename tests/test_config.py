@@ -45,6 +45,15 @@ def test_readiness_profiles_are_valid(profile: str, device: str) -> None:
     assert config["task"]["mode"] == "numeric"
 
 
+def test_pilot_profile_fits_tiny_graph_generator_and_uses_geometry_ood() -> None:
+    config = load_config("pilot_gpu")
+    assert config["graph"]["max_graph_nodes"] == 128
+    assert config["graph"]["expected_num_nodes"] == 128
+    assert config["model"]["hidden_size"] == 128
+    assert config["data"]["split_strategy"] == "held_out_geometry"
+    assert config["task"]["primary_split"] == "test_held_out_geometry_ood"
+
+
 def test_paper_profile_requires_resource_acceptance() -> None:
     config = load_config("paper_gpu")
     assert config["resource_guard"]["require_explicit_acceptance"] is True

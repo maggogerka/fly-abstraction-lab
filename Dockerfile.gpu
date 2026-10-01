@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /workspace
 COPY requirements.lock ./
 RUN python -m pip install --no-cache-dir -r requirements.lock && \
-    python -c "import torch; assert torch.__version__.startswith('2.7.1'); assert torch.version.cuda == '12.8'; assert 'sm_120' in torch.cuda.get_arch_list()"
+    python -c "import sys, torch; assert sys.version_info[:2] == (3, 11); assert torch.__version__.startswith('2.7.1'); assert torch.version.cuda == '12.8'; assert 'sm_120' in torch.cuda.get_arch_list()"
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN python -m pip install --no-build-isolation --no-deps .

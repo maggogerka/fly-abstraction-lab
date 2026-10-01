@@ -10,8 +10,19 @@ from typing import Any
 
 import yaml
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_DIR = REPOSITORY_ROOT / "configs"
+
+def _discover_config_dir() -> Path:
+    """Find repository configs in editable and regular-install executions."""
+    source_checkout = Path(__file__).resolve().parents[2] / "configs"
+    working_checkout = Path.cwd().resolve() / "configs"
+    for candidate in (source_checkout, working_checkout):
+        if (candidate / "base.yaml").is_file():
+            return candidate
+    # Retain the expected repository-root path for a useful later ConfigError.
+    return working_checkout
+
+
+CONFIG_DIR = _discover_config_dir()
 LOCAL_LIMITS = {
     "data.max_examples": 500,
     "training.max_epochs": 1,

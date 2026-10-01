@@ -26,6 +26,8 @@ Last updated: 2026-10-01
   template aggregation, and sample-efficiency record format.
 - Added safety-gated CLI, CPU/GPU Docker definitions, Compose, CPU-only CI, tests,
   local/research-PC guides, and citation metadata.
+- Created private GitHub repository `maggogerka/fly-abstraction-lab`, attached `origin`,
+  and pushed `main` plus `feat/research-mvp` without creating a PR or merge.
 
 ## Decisions
 
@@ -48,17 +50,17 @@ Last updated: 2026-10-01
 - `train` without confirmation: passed as a side-effect-free dry-run; no result run
   directory was created.
 - `docker compose config --quiet`: passed; no image was built and no service started.
+- GitHub remote verified private and both requested branches pushed successfully.
 - No training or download has been run.
 
 ## Constraints observed
 
 - No training, real downloads, Docker builds, or services have been started.
-- GitHub CLI is installed, but the configured `maggogerka` token is invalid.
-- GitHub repository creation/push is pending `gh auth login -h github.com`.
+- The real dataset/connectome adapters require separately authorized, license-compliant
+  local artifacts before a research run.
 
 ## Next step
 
-Authenticate GitHub CLI, create or safely attach the private remote, and push
-`feat/research-mvp`. Then a human may run the confirmed `local_cpu` command and analyze
-the append-only artifacts under `results/<run_id>/`.
+A human may run the confirmed `local_cpu` command and analyze the append-only artifacts
+under `results/<run_id>/`; paper-scale assets and execution remain explicitly deferred.
 

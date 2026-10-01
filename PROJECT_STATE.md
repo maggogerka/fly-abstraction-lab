@@ -36,17 +36,29 @@ Last updated: 2026-10-01
 
 ## Validation
 
-- Source and configuration validation is pending runtime discovery.
+- Installed Python 3.11.9 through the official Python Install Manager and created the
+  ignored local `.venv`; project dependencies installed successfully.
+- `ruff check .`: passed.
+- `pytest`: 15 passed in 25.84s, including exactly one forward/backward without an
+  optimizer step.
+- `doctor`: passed on Python 3.11.9 / PyTorch 2.14.1+cpu; CUDA correctly unavailable.
+- `show-config`: passed for `local_cpu`, with every required limit resolved correctly.
+- `data list`: passed; only registry metadata was read.
+- `data prepare-tiny`: generated 100 deterministic ignored JSONL records locally.
+- `train` without confirmation: passed as a side-effect-free dry-run; no result run
+  directory was created.
+- `docker compose config --quiet`: passed; no image was built and no service started.
 - No training or download has been run.
 
 ## Constraints observed
 
 - No training, real downloads, Docker builds, or services have been started.
 - GitHub CLI is installed, but the configured `maggogerka` token is invalid.
-- A Python 3.11 runtime was not detected by the Windows Python launcher.
+- GitHub repository creation/push is pending `gh auth login -h github.com`.
 
 ## Next step
 
-Run Ruff, pytest, safe CLI commands, and `docker compose config`; repair any failures;
-then commit the MVP and push if GitHub authentication becomes valid.
+Authenticate GitHub CLI, create or safely attach the private remote, and push
+`feat/research-mvp`. Then a human may run the confirmed `local_cpu` command and analyze
+the append-only artifacts under `results/<run_id>/`.
 

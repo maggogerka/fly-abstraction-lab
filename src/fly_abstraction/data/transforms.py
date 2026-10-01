@@ -81,6 +81,8 @@ def numeric_extrapolation(problem: MathProblem, seed: int = 0) -> MathProblem:
     replacements = {number: number * factor for number in numbers if number != 0}
     extrapolated = expression.xreplace(replacements)
     answer = str(sympy.simplify(extrapolated))
+    if not sympy_equivalent(str(extrapolated), answer):
+        raise TransformationError("numeric_extrapolation failed SymPy answer check")
     prompt = f"Evaluate the extrapolated expression: {extrapolated}"
     return _append(
         problem,
@@ -113,20 +115,40 @@ def equivalent_expression(problem: MathProblem, seed: int = 0) -> MathProblem:
 
 def equation_rearrangement(problem: MathProblem, seed: int = 0) -> MathProblem:
     del seed
-    match = re.search(r"([^=]+)=([^=]+)", problem.prompt)
-    if not match:
+    if "=" not in problem.prompt:
+        if not sympy_equivalent(problem.expression, problem.expression):
+            raise TransformationError("equation_rearrangement received an invalid expression")
         return _append(
             problem,
             "equation_rearrangement",
             prompt=f"Find the value represented by the equivalent expression {problem.expression}",
         )
-    left, right = match.group(1).strip(), match.group(2).strip()
-    rearranged = f"{right} = {left}"
-    prompt = problem.prompt[: match.start()] + rearranged + problem.prompt[match.end() :]
+    before_equals, after_equals = problem.prompt.split("=", 1)
+    prefix = ""
+    prefix_match = re.match(r"(?i)^(.*?\b(?:solve|given)\s+)(.+)$", before_equals.strip())
+    if prefix_match:
+        prefix, left = prefix_match.group(1), prefix_match.group(2).strip()
+    else:
+        left = before_equals.strip()
+    suffix = ""
+    suffix_match = re.match(r"^(.+?)(\s+for\s+.+)$", after_equals.strip(), re.IGNORECASE)
+    if suffix_match:
+        right, suffix = suffix_match.group(1).strip(), suffix_match.group(2)
+    else:
+        right = after_equals.strip()
+    try:
+        left_expr, right_expr = sympy.sympify(left), sympy.sympify(right)
+    except (TypeError, ValueError, sympy.SympifyError) as exc:
+        raise TransformationError("equation_rearrangement could not parse the equation") from exc
+    if sympy.simplify((left_expr - right_expr) + (right_expr - left_expr)) != 0:
+        raise TransformationError("equation_rearrangement failed SymPy relation check")
+    prompt = f"{prefix}{right} = {left}{suffix}"
     return _append(problem, "equation_rearrangement", prompt=prompt)
 
 
 def distractor_variables(problem: MathProblem, seed: int = 0) -> MathProblem:
+    if not sympy_equivalent(problem.expression, problem.expression):
+        raise TransformationError("distractor_variables received an invalid expression")
     value = 2 + _seed(problem, "distractor_variables", seed) % 97
     name = f"unused_{value % 11}"
     return _append(
@@ -140,12 +162,12 @@ def distractor_variables(problem: MathProblem, seed: int = 0) -> MathProblem:
 
 def held_out_template(problem: MathProblem, seed: int = 0) -> MathProblem:
     del seed
-    metadata = dict(problem.metadata)
+    transformed = _append(problem, "held_out_template", split="test_held_out_template")
+    if not sympy_equivalent(problem.expression, transformed.expression):
+        raise TransformationError("held_out_template changed expression semantics")
+    metadata = dict(transformed.metadata)
     metadata["held_out_template"] = True
-    return replace(
-        _append(problem, "held_out_template", split="test_held_out_template"),
-        metadata=metadata,
-    )
+    return replace(transformed, metadata=metadata)
 
 
 TRANSFORMS: dict[str, Callable[[MathProblem, int], MathProblem]] = {

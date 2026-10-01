@@ -5,6 +5,7 @@ from fly_abstraction.data.schema import MathProblem
 from fly_abstraction.data.transforms import (
     assert_no_template_leakage,
     compositional_split,
+    equation_rearrangement,
     equivalent_expression,
     split_without_template_leakage,
     symbol_rename,
@@ -37,6 +38,15 @@ def test_symbolic_transforms_preserve_identity_and_equivalence() -> None:
     assert sympy_equivalent(problem.expression, equivalent.expression)
     assert composed.split == "test_compositional_ood"
     assert composed.transformations[-1] == "compositional_split"
+
+
+def test_equation_rearrangement_preserves_solve_prompt_semantics() -> None:
+    problem = TinyDatasetAdapter.generate(4, 17)[2]
+    assert "=" in problem.prompt
+    transformed = equation_rearrangement(problem)
+    assert transformed.prompt.startswith("Solve ")
+    assert transformed.prompt.endswith(" for x")
+    assert transformed.answer == problem.answer
 
 
 def test_split_has_no_template_leakage() -> None:

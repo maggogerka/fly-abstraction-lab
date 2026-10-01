@@ -1,0 +1,23 @@
+profile: paper_gpu
+seed: 1701
+data:
+  dataset: deepmind_mathematics
+  path: data/processed/deepmind_mathematics.jsonl
+  max_examples: 250000
+graph:
+  kind: flywire_fafb_v783
+  path: data/processed/flywire_fafb_v783.json
+  max_graph_nodes: 50000
+model:
+  name: trainable_connectome_rnn
+  hidden_size: 512
+training:
+  max_epochs: 100
+  batch_size: 128
+  num_workers: 8
+  checkpoints: true
+runtime:
+  device: cuda
+  torch_threads: 8
+  mixed_precision: true
+

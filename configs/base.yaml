@@ -1,0 +1,36 @@
+project: fly-abstraction-lab
+profile: base
+seed: 17
+deterministic: true
+data:
+  dataset: tiny
+  path: data/processed/tiny.jsonl
+  max_examples: 1000
+  held_out_template_fraction: 0.25
+graph:
+  kind: tiny_synthetic
+  path: data/processed/connectome.json
+  max_graph_nodes: 256
+  normalization: incoming
+model:
+  name: trainable_connectome_rnn
+  vocab_size: 128
+  embedding_dim: 16
+  hidden_size: 64
+  expression_vocab_size: 128
+training:
+  max_epochs: 20
+  batch_size: 32
+  num_workers: 2
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  early_stopping_patience: 4
+  checkpoints: true
+runtime:
+  device: auto
+  torch_threads: 4
+  mixed_precision: false
+output:
+  root: results
+

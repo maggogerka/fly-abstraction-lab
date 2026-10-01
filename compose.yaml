@@ -1,0 +1,32 @@
+services:
+  local-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    command: ["--profile", "local_cpu", "doctor"]
+    volumes:
+      - ./configs:/workspace/configs:ro
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+    environment:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+
+  research-gpu:
+    profiles: ["research"]
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    command: ["--profile", "paper_gpu", "doctor"]
+    volumes:
+      - ./configs:/workspace/configs:ro
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+

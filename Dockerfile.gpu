@@ -1,0 +1,15 @@
+FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /workspace
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+RUN python -m pip install --upgrade pip && python -m pip install --no-deps . && \
+    python -m pip install "numpy>=1.26,<3" "psutil>=5.9,<8" "PyYAML>=6,<7" "sympy>=1.12,<2"
+COPY configs ./configs
+ENTRYPOINT ["python", "-m", "fly_abstraction"]
+CMD ["doctor"]
+

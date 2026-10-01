@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from dataclasses import replace
 
 import torch
@@ -17,56 +16,29 @@ def _tag(graph: ConnectomeGraph, control: str, seed: int) -> dict[str, object]:
 def degree_preserving_rewired(
     graph: ConnectomeGraph, seed: int = 17, swaps_per_edge: int = 4
 ) -> ConnectomeGraph:
-    """Directed double-edge swaps preserve each node's in- and out-degree."""
-    rng = random.Random(seed)
-    edges = [tuple(edge) for edge in graph.edge_index.T.tolist()]
-    edge_set = set(edges)
-    if len(edge_set) != len(edges):
-        raise ValueError("degree-preserving rewiring requires unique input edges")
-    target_swaps = max(1, graph.num_edges * swaps_per_edge)
-    completed = 0
-    for _ in range(target_swaps * 20):
-        if completed >= target_swaps:
-            break
-        first, second = rng.sample(range(len(edges)), 2)
-        a, b = edges[first]
-        c, d = edges[second]
-        candidate_one, candidate_two = (a, d), (c, b)
-        if a == d or c == b or candidate_one == candidate_two:
-            continue
-        old = {edges[first], edges[second]}
-        if any(candidate in edge_set - old for candidate in (candidate_one, candidate_two)):
-            continue
-        edge_set.difference_update(old)
-        edge_set.update((candidate_one, candidate_two))
-        edges[first], edges[second] = candidate_one, candidate_two
-        completed += 1
-    edge_index = torch.tensor(edges, dtype=torch.long).T.contiguous()
-    metadata = _tag(graph, "degree_preserving_rewired", seed)
-    metadata["completed_swaps"] = completed
+    """Tensor-only directed configuration-model control preserving both degree sequences."""
+    del swaps_per_edge
+    generator = torch.Generator().manual_seed(seed)
+    edge_index = graph.edge_index.clone()
+    edge_index[1] = edge_index[1, torch.randperm(graph.num_edges, generator=generator)]
+    metadata = _tag(graph, "degree_preserving", seed)
+    metadata["multigraph_control"] = True
     return replace(graph, edge_index=edge_index, metadata=metadata)
 
 
 def erdos_renyi_matched(graph: ConnectomeGraph, seed: int = 17) -> ConnectomeGraph:
-    """Sample exactly the same number of unique directed, non-self edges."""
-    capacity = graph.num_nodes * (graph.num_nodes - 1)
-    if graph.num_edges > capacity:
-        raise ValueError("Too many edges for a simple directed Erdos-Renyi graph")
-    rng = random.Random(seed)
-    edges: set[tuple[int, int]] = set()
-    while len(edges) < graph.num_edges:
-        source = rng.randrange(graph.num_nodes)
-        target = rng.randrange(graph.num_nodes - 1)
-        if target >= source:
-            target += 1
-        edges.add((source, target))
-    edge_index = torch.tensor(sorted(edges), dtype=torch.long).T.contiguous()
-    order = torch.randperm(graph.num_edges, generator=torch.Generator().manual_seed(seed))
+    """Tensor-only matched directed random multigraph with no self loops."""
+    generator = torch.Generator().manual_seed(seed)
+    source = torch.randint(graph.num_nodes, (graph.num_edges,), generator=generator)
+    target = torch.randint(graph.num_nodes - 1, (graph.num_edges,), generator=generator)
+    target += target >= source
+    edge_index = torch.stack((source, target))
+    order = torch.randperm(graph.num_edges, generator=generator)
     return replace(
         graph,
         edge_index=edge_index,
         edge_weight=graph.edge_weight[order].clone(),
-        metadata=_tag(graph, "erdos_renyi_matched", seed),
+        metadata={**_tag(graph, "er_random", seed), "multigraph_control": True},
     )
 
 
@@ -97,8 +69,29 @@ def assert_basic_matched_invariants(original: ConnectomeGraph, control: Connecto
         raise AssertionError("node count changed")
     if original.num_edges != control.num_edges:
         raise AssertionError("edge count changed")
+    if not torch.equal(original.input_nodes, control.input_nodes):
+        raise AssertionError("input-node mapping changed")
+    if not torch.equal(original.output_nodes, control.output_nodes):
+        raise AssertionError("output-node mapping changed")
     if not torch.allclose(
         torch.sort(original.edge_weight).values,
         torch.sort(control.edge_weight).values,
     ):
         raise AssertionError("edge-weight multiset changed")
+
+
+def apply_graph_variant(graph: ConnectomeGraph, variant: str, seed: int) -> ConnectomeGraph:
+    builders = {
+        "degree_preserving": degree_preserving_rewired,
+        "weight_shuffled": weight_shuffled,
+        "direction_shuffled": direction_shuffled,
+        "er_random": erdos_renyi_matched,
+    }
+    if variant == "real":
+        return graph
+    try:
+        control = builders[variant](graph, seed)
+    except KeyError as exc:
+        raise ValueError(f"Unknown graph variant: {variant}") from exc
+    assert_basic_matched_invariants(graph, control)
+    return control

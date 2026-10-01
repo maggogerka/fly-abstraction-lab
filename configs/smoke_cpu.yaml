@@ -1,0 +1,21 @@
+profile: smoke_cpu
+data:
+  max_examples: 32
+  sequence_length: 32
+graph:
+  kind: tiny_synthetic
+  variant: real
+  max_graph_nodes: 16
+  expected_num_nodes: 16
+  expected_num_edges: 32
+model:
+  hidden_size: 16
+training:
+  max_epochs: 1
+  batch_size: 2
+  num_workers: 0
+  checkpoints: false
+runtime:
+  device: cpu
+  torch_threads: 2
+  mixed_precision: false

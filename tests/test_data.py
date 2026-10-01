@@ -1,6 +1,8 @@
 from dataclasses import replace
 
-from fly_abstraction.data.adapters import TinyDatasetAdapter
+import pytest
+
+from fly_abstraction.data.adapters import TinyDatasetAdapter, UCIEnergyEfficiencyAdapter
 from fly_abstraction.data.schema import MathProblem
 from fly_abstraction.data.transforms import (
     assert_no_template_leakage,
@@ -28,6 +30,7 @@ def test_symbolic_transforms_preserve_identity_and_equivalence() -> None:
         prompt="Simplify (x + 1)**2",
         answer="x**2 + 2*x + 1",
         expression="(x + 1)**2",
+        target_mode="symbolic_future",
         variables=("x",),
     )
     renamed = symbol_rename(problem, 3)
@@ -61,3 +64,22 @@ def test_split_has_no_template_leakage() -> None:
         pass
     else:
         raise AssertionError("leakage check accepted an overlapping template")
+
+
+@pytest.mark.parametrize("answer", ["not-a-number", "NaN", "inf", "-inf"])
+def test_numeric_targets_reject_non_finite_values(answer: str) -> None:
+    with pytest.raises(ValueError, match="Numeric target"):
+        MathProblem(
+            source_id="bad",
+            template_id="bad",
+            prompt="Predict a number",
+            answer=answer,
+            expression="numeric target",
+        )
+
+
+def test_uci_adapter_rejects_non_finite_features() -> None:
+    record = {f"X{index}": "1" for index in range(1, 9)}
+    record.update({"Y1": "2", "Y2": "3", "row_id": "0", "X3": "NaN"})
+    with pytest.raises(ValueError, match="finite"):
+        UCIEnergyEfficiencyAdapter().adapt(record)

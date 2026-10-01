@@ -20,6 +20,20 @@ LOCAL_LIMITS = {
     "training.num_workers": 0,
     "runtime.torch_threads": 2,
 }
+PROFILE_DEVICES = {
+    "local_cpu": "cpu",
+    "smoke_cpu": "cpu",
+    "smoke_gpu": "cuda",
+    "pilot_gpu": "cuda",
+    "paper_gpu": "cuda",
+}
+GRAPH_VARIANTS = {
+    "real",
+    "degree_preserving",
+    "weight_shuffled",
+    "direction_shuffled",
+    "er_random",
+}
 
 
 class ConfigError(ValueError):
@@ -78,11 +92,48 @@ def validate_config(config: dict[str, Any]) -> None:
     ):
         if not isinstance(_get(config, path), int) or _get(config, path) <= 0:
             raise ConfigError(f"{path} must be a positive integer")
-    if config["profile"] not in {"local_cpu", "paper_gpu"}:
+    if config["profile"] not in PROFILE_DEVICES:
         raise ConfigError(f"Unknown profile: {config['profile']}")
-    expected_device = "cpu" if config["profile"] == "local_cpu" else "cuda"
+    expected_device = PROFILE_DEVICES[config["profile"]]
     if config["runtime"]["device"] != expected_device:
         raise ConfigError(f"{config['profile']} must use device={expected_device}")
+    if config.get("task", {}).get("mode") != "numeric":
+        raise ConfigError(
+            "Only task.mode=numeric is implemented in the MVP; symbolic targets are future work"
+        )
+    variant = config["graph"].get("variant")
+    if variant not in GRAPH_VARIANTS:
+        raise ConfigError(
+            f"Unknown graph.variant={variant!r}; choose one of {sorted(GRAPH_VARIANTS)}"
+        )
+    for path in (
+        "data.sequence_length",
+        "graph.expected_num_nodes",
+        "graph.expected_num_edges",
+    ):
+        if not isinstance(_get(config, path), int) or _get(config, path) <= 0:
+            raise ConfigError(f"{path} must be a positive integer")
+    if int(config["graph"]["expected_num_nodes"]) > int(config["graph"]["max_graph_nodes"]):
+        raise ConfigError("graph.expected_num_nodes cannot exceed graph.max_graph_nodes")
+    for path in ("data.held_out_template_fraction", "data.validation_fraction"):
+        if not 0 < float(_get(config, path)) < 1:
+            raise ConfigError(f"{path} must be between zero and one")
+    for path in ("resource_guard.max_ram_fraction", "resource_guard.max_vram_fraction"):
+        if not 0 < float(_get(config, path)) <= 1:
+            raise ConfigError(f"{path} must be in (0, 1]")
+    metrics = config["task"]["metrics"]
+    if float(metrics["absolute_tolerance"]) < 0 or float(metrics["relative_tolerance"]) < 0:
+        raise ConfigError("Metric tolerances cannot be negative")
+    if float(metrics["relative_epsilon"]) <= 0:
+        raise ConfigError("task.metrics.relative_epsilon must be positive")
+    if config["profile"] == "paper_gpu" and not config["resource_guard"].get(
+        "require_explicit_acceptance"
+    ):
+        raise ConfigError("paper_gpu must require explicit resource-estimate acceptance")
+    for path in ("data.path", "data.split_manifest_dir", "graph.path", "output.root"):
+        value = Path(str(_get(config, path)))
+        if value.is_absolute() or ".." in value.parts:
+            raise ConfigError(f"{path} must remain inside the repository")
 
 
 def local_safety_violations(config: dict[str, Any]) -> list[str]:

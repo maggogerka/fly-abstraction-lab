@@ -1,0 +1,26 @@
+profile: pilot_gpu
+seed: 1701
+data:
+  dataset: uci_energy_efficiency
+  version: "UCI-242-2024-02-26"
+  path: data/processed/uci_energy_efficiency.jsonl
+  max_examples: 768
+  sequence_length: 96
+graph:
+  kind: tiny_synthetic
+  variant: real
+  max_graph_nodes: 256
+  expected_num_nodes: 256
+  expected_num_edges: 512
+model:
+  name: trainable_connectome_rnn
+  hidden_size: 256
+training:
+  max_epochs: 5
+  batch_size: 16
+  num_workers: 2
+  checkpoints: true
+runtime:
+  device: cuda
+  torch_threads: 8
+  mixed_precision: true

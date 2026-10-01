@@ -54,10 +54,7 @@ class CharacterEncoder:
         return torch.sign(values) * torch.log1p(values.abs())
 
     def encode(self, problem: MathProblem) -> EncodedProblem:
-        try:
-            answer = float(problem.answer)
-        except ValueError:
-            answer = float("nan")
+        answer = problem.numeric_target
         expression = self.encode_text(problem.expression)
         expression[:-1] = expression[1:].clone()
         expression[-1] = self.PAD

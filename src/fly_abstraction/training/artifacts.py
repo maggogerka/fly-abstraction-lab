@@ -35,7 +35,11 @@ def _package_version(name: str) -> str:
 
 
 def build_manifest(
-    config: dict[str, Any], data_path: Path, graph_hash: str, seed: int
+    config: dict[str, Any],
+    data_path: Path,
+    graph_hash: str,
+    seed: int,
+    split_manifest_sha256: str | None = None,
 ) -> dict[str, Any]:
     cuda_available = torch.cuda.is_available()
     return {
@@ -59,6 +63,7 @@ def build_manifest(
             "data": sha256_file(data_path),
             "connectome": graph_hash,
             "config": config_hash(config),
+            "split_manifest": split_manifest_sha256,
         },
     }
 

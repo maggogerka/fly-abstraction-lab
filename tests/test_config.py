@@ -28,3 +28,23 @@ def test_override_violation_is_reported(tmp_path: Path) -> None:
 def test_unknown_profile_is_rejected() -> None:
     with pytest.raises(ConfigError):
         load_config("missing")
+
+
+@pytest.mark.parametrize(
+    ("profile", "device"),
+    [
+        ("smoke_cpu", "cpu"),
+        ("smoke_gpu", "cuda"),
+        ("pilot_gpu", "cuda"),
+        ("paper_gpu", "cuda"),
+    ],
+)
+def test_readiness_profiles_are_valid(profile: str, device: str) -> None:
+    config = load_config(profile)
+    assert config["runtime"]["device"] == device
+    assert config["task"]["mode"] == "numeric"
+
+
+def test_paper_profile_requires_resource_acceptance() -> None:
+    config = load_config("paper_gpu")
+    assert config["resource_guard"]["require_explicit_acceptance"] is True

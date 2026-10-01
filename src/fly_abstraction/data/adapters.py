@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -120,6 +122,61 @@ class TinyDatasetAdapter(DatasetAdapter):
     def prepare(cls, path: Path, count: int = 100, seed: int = 17) -> Path:
         write_jsonl(path, (problem.to_dict() for problem in cls.generate(count, seed)))
         return path
+
+
+class UCIEnergyEfficiencyAdapter(DatasetAdapter):
+    """UCI 242 regression adapter using heating load (Y1) as the numeric target."""
+
+    feature_names = {
+        "X1": "relative compactness",
+        "X2": "surface area",
+        "X3": "wall area",
+        "X4": "roof area",
+        "X5": "overall height",
+        "X6": "orientation",
+        "X7": "glazing area",
+        "X8": "glazing area distribution",
+    }
+
+    def adapt(self, record: Mapping[str, Any]) -> MathProblem:
+        values = {key: float(record[key]) for key in (*self.feature_names, "Y1", "Y2")}
+        if not all(math.isfinite(value) for value in values.values()):
+            raise ValueError("UCI Energy Efficiency rows must contain only finite numbers")
+        features = ", ".join(f"{name}={values[key]:g}" for key, name in self.feature_names.items())
+        shape = ":".join(f"{values[key]:g}" for key in ("X1", "X2", "X3", "X4", "X5"))
+        row_id = str(record.get("source_id", record.get("row_id", "unknown")))
+        return MathProblem(
+            source_id=f"uci-energy-{row_id}",
+            template_id=f"uci-energy-shape:{shape}",
+            prompt=f"Predict building heating load from {features}",
+            answer=format(values["Y1"], ".12g"),
+            expression=format(values["Y1"], ".12g"),
+            target_mode="numeric",
+            numeric_values=tuple(values[key] for key in self.feature_names),
+            metadata={
+                "dataset": "uci_energy_efficiency",
+                "dataset_version": "UCI-242-2024-02-26",
+                "cooling_load": values["Y2"],
+            },
+        )
+
+    @classmethod
+    def prepare(cls, source: Path, output: Path) -> Path:
+        if not source.is_file():
+            raise FileNotFoundError(f"Confirmed UCI CSV is missing: {source}")
+        problems: list[MathProblem] = []
+        with source.open(encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            required = {*cls.feature_names, "Y1", "Y2"}
+            if not reader.fieldnames or not required.issubset(reader.fieldnames):
+                raise ValueError(f"UCI CSV must contain columns {sorted(required)}")
+            for index, row in enumerate(reader):
+                row["row_id"] = str(index)
+                problems.append(cls().adapt(row))
+        if len(problems) != 768:
+            raise ValueError(f"Expected 768 UCI rows, got {len(problems)}")
+        save_problems(output, problems)
+        return output
 
 
 def save_problems(path: Path, problems: Iterable[MathProblem]) -> None:

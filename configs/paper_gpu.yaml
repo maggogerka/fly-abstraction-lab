@@ -1,23 +1,32 @@
 profile: paper_gpu
 seed: 1701
 data:
-  dataset: deepmind_mathematics
-  path: data/processed/deepmind_mathematics.jsonl
-  max_examples: 250000
+  dataset: uci_energy_efficiency
+  version: "UCI-242-2024-02-26"
+  path: data/processed/uci_energy_efficiency.jsonl
+  max_examples: 768
+  sequence_length: 96
 graph:
   kind: flywire_fafb_v783
-  path: data/processed/flywire_fafb_v783.json
-  max_graph_nodes: 50000
+  path: data/processed/flywire_fafb_v783.npz
+  variant: real
+  max_graph_nodes: 5000
+  expected_num_nodes: 5000
+  expected_num_edges: 500000
 model:
   name: trainable_connectome_rnn
-  hidden_size: 512
+  hidden_size: 5000
 training:
-  max_epochs: 100
-  batch_size: 128
-  num_workers: 8
+  max_epochs: 20
+  batch_size: 4
+  num_workers: 4
   checkpoints: true
 runtime:
   device: cuda
   torch_threads: 8
   mixed_precision: true
+resource_guard:
+  max_ram_fraction: 0.70
+  max_vram_fraction: 0.70
+  require_explicit_acceptance: true
 

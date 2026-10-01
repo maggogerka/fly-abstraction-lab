@@ -14,9 +14,18 @@ import psutil
 import torch
 
 from fly_abstraction import __version__
-from fly_abstraction.config import dump_config, load_config, local_safety_violations
-from fly_abstraction.data.adapters import TinyDatasetAdapter
+from fly_abstraction.config import (
+    PROFILE_DEVICES,
+    dump_config,
+    load_config,
+    local_safety_violations,
+)
+from fly_abstraction.data.adapters import TinyDatasetAdapter, UCIEnergyEfficiencyAdapter
+from fly_abstraction.data.downloads import download_registered_dataset
 from fly_abstraction.data.registry import REGISTRY, get_dataset
+from fly_abstraction.diagnostics import gpu_report, run_gpu_smoke
+from fly_abstraction.graph.flywire import convert_local_flywire_export
+from fly_abstraction.resources import enforce_resource_guard, estimate_resources
 from fly_abstraction.training.metrics import evaluate_records
 from fly_abstraction.training.pipeline import train_experiment
 from fly_abstraction.utils import read_jsonl
@@ -24,8 +33,10 @@ from fly_abstraction.utils import read_jsonl
 
 def _relative_path(value: str) -> Path:
     path = Path(value)
-    if path.is_absolute():
-        raise argparse.ArgumentTypeError("Paths must be repository-relative")
+    if path.is_absolute() or ".." in path.parts:
+        raise argparse.ArgumentTypeError(
+            "Paths must be repository-relative and cannot contain parent traversal"
+        )
     return path
 
 
@@ -59,6 +70,19 @@ def command_doctor(args: argparse.Namespace) -> int:
     return 0 if checks["python_supported"] else 1
 
 
+def command_doctor_gpu(args: argparse.Namespace) -> int:
+    del args
+    report = gpu_report()
+    print(json.dumps(report, indent=2))
+    return 0 if report["blackwell_ready"] else 1
+
+
+def command_smoke_gpu(args: argparse.Namespace) -> int:
+    del args
+    print(json.dumps(run_gpu_smoke(), indent=2))
+    return 0
+
+
 def command_show_config(args: argparse.Namespace) -> int:
     print(dump_config(_config(args)), end="")
     return 0
@@ -71,6 +95,7 @@ def command_data_list(args: argparse.Namespace) -> int:
         print(
             f"{key}: {record.name} | {record.version} | {record.license} | "
             f"{record.expected_bytes} bytes{external}\n  {record.url}\n  {record.citation}"
+            f"\n  checksum: {record.published_checksum or record.checksum_policy}"
         )
     return 0
 
@@ -92,27 +117,39 @@ def command_data_download(args: argparse.Namespace) -> int:
     if not args.confirm_download:
         print("DRY-RUN: no download performed; pass --confirm-download after reviewing metadata")
         return 0
-    raise RuntimeError(
-        "Automatic real-data acquisition is intentionally adapter-specific and not "
-        "enabled in the MVP; "
-        "place a license-compliant local export under data/raw"
-    )
+    path, manifest = download_registered_dataset(record, args.output_root)
+    print(f"Downloaded and hashed: {path}\nManifest: {manifest}")
+    return 0
+
+
+def command_prepare_uci(args: argparse.Namespace) -> int:
+    UCIEnergyEfficiencyAdapter.prepare(args.source, args.output)
+    print(f"Prepared finite numeric pilot records at {args.output}")
+    return 0
+
+
+def command_convert_flywire(args: argparse.Namespace) -> int:
+    convert_local_flywire_export(args.edges, args.output)
+    print(f"Converted authorized local export to {args.output}")
+    return 0
 
 
 def command_train(args: argparse.Namespace) -> int:
     config = _config(args)
-    estimate = int(config["data"]["max_examples"]) * 65_536
+    estimate = estimate_resources(config)
     preview = {
         "mode": "confirmed" if args.confirm_train else "dry-run",
         "profile": config["profile"],
         "parameters": config,
-        "resources": _resources(estimate),
+        "resource_estimate": estimate.to_dict(),
         "results_root": config["output"]["root"],
     }
     print(json.dumps(preview, indent=2))
     if not args.confirm_train:
         print("DRY-RUN COMPLETE: training code was not entered and no result directory was created")
         return 0
+
+    enforce_resource_guard(config, estimate, accepted=args.accept_resource_estimate)
 
     violations = local_safety_violations(config)
     if violations and not args.override_local_safety:
@@ -125,7 +162,12 @@ def command_train(args: argparse.Namespace) -> int:
             raise RuntimeError("paper_gpu requires --confirm-heavy-run")
         if not torch.cuda.is_available():
             raise RuntimeError("paper_gpu requires an available CUDA device")
-    path = train_experiment(config, run_id=args.run_id, resume=args.resume)
+    path = train_experiment(
+        config,
+        run_id=args.run_id,
+        resume=args.resume,
+        resource_estimate_accepted=args.accept_resource_estimate,
+    )
     print(f"Completed run artifacts: {path}")
     return 0
 
@@ -135,18 +177,25 @@ def command_evaluate(args: argparse.Namespace) -> int:
         print("DRY-RUN: pass --predictions results/<run_id>/predictions.jsonl to evaluate")
         return 0
     records = read_jsonl(args.predictions)
-    print(json.dumps(evaluate_records(records), indent=2))
+    config = _config(args)
+    print(json.dumps(evaluate_records(records, **config["task"]["metrics"]), indent=2))
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m fly_abstraction")
-    parser.add_argument("--profile", choices=("local_cpu", "paper_gpu"), default="local_cpu")
+    parser.add_argument("--profile", choices=tuple(PROFILE_DEVICES), default="local_cpu")
     parser.add_argument("--config", type=_relative_path, help="optional YAML overrides")
     commands = parser.add_subparsers(dest="command", required=True)
 
     doctor = commands.add_parser("doctor", help="inspect runtime without changing it")
     doctor.set_defaults(handler=command_doctor)
+    doctor_gpu = commands.add_parser("doctor-gpu", help="verify CUDA, sm_120, VRAM, and AMP")
+    doctor_gpu.set_defaults(handler=command_doctor_gpu)
+    smoke_gpu = commands.add_parser(
+        "smoke-gpu", help="one tiny CUDA forward/backward without an optimizer step"
+    )
+    smoke_gpu.set_defaults(handler=command_smoke_gpu)
     show = commands.add_parser("show-config", help="print the resolved YAML profile")
     show.set_defaults(handler=command_show_config)
 
@@ -162,11 +211,36 @@ def build_parser() -> argparse.ArgumentParser:
     download = data_commands.add_parser("download", help="review guarded real-data acquisition")
     download.add_argument("name", choices=tuple(sorted(REGISTRY)))
     download.add_argument("--confirm-download", action="store_true")
+    download.add_argument("--output-root", type=_relative_path, default=Path("data/raw"))
     download.set_defaults(handler=command_data_download)
+    uci = data_commands.add_parser("prepare-uci-energy", help="convert confirmed UCI CSV")
+    uci.add_argument(
+        "--source",
+        type=_relative_path,
+        default=Path("data/raw/uci_energy_efficiency/data.csv"),
+    )
+    uci.add_argument(
+        "--output",
+        type=_relative_path,
+        default=Path("data/processed/uci_energy_efficiency.jsonl"),
+    )
+    uci.set_defaults(handler=command_prepare_uci)
+
+    graph = commands.add_parser("graph")
+    graph_commands = graph.add_subparsers(dest="graph_command", required=True)
+    flywire = graph_commands.add_parser(
+        "convert-flywire", help="convert an authorized local aggregated FlyWire CSV"
+    )
+    flywire.add_argument("--edges", type=_relative_path, required=True)
+    flywire.add_argument(
+        "--output", type=_relative_path, default=Path("data/processed/flywire_fafb_v783.npz")
+    )
+    flywire.set_defaults(handler=command_convert_flywire)
 
     train = commands.add_parser("train", help="dry-run unless explicitly confirmed")
     train.add_argument("--confirm-train", action="store_true")
     train.add_argument("--confirm-heavy-run", action="store_true")
+    train.add_argument("--accept-resource-estimate", action="store_true")
     train.add_argument("--override-local-safety", action="store_true")
     train.add_argument("--run-id")
     train.add_argument("--resume", type=_relative_path)

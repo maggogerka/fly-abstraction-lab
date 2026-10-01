@@ -15,6 +15,10 @@ class DatasetRecord:
     expected_bytes: int
     adapter: str
     external_benchmark: bool = False
+    download_url: str | None = None
+    filename: str | None = None
+    published_checksum: str | None = None
+    checksum_policy: str = "metadata-only; no automatic download"
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -57,6 +61,22 @@ REGISTRY: dict[str, DatasetRecord] = {
         citation="Fly Abstraction Lab synthetic smoke-test data",
         expected_bytes=100_000,
         adapter="TinyDatasetAdapter",
+    ),
+    "uci_energy_efficiency": DatasetRecord(
+        name="UCI Energy Efficiency",
+        url="https://archive.ics.uci.edu/dataset/242/energy+efficiency",
+        version="UCI-242-2024-02-26",
+        license="CC BY 4.0",
+        citation="Tsanas and Xifara, Energy and Buildings 49 (2012), DOI 10.24432/C51307",
+        expected_bytes=100_000,
+        adapter="UCIEnergyEfficiencyAdapter",
+        download_url="https://archive.ics.uci.edu/static/public/242/data.csv",
+        filename="data.csv",
+        published_checksum=None,
+        checksum_policy=(
+            "UCI does not publish a digest in its API; compute SHA256 during the confirmed "
+            "download and pin it in the adjacent manifest"
+        ),
     ),
 }
 

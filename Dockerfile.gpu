@@ -1,15 +1,17 @@
-FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime@sha256:c16f4c749e2d9e96878875cdf6cc45cddda1d1a36fddd371dd6f2360f1b6e2a2
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /workspace
+COPY requirements.lock ./
+RUN python -m pip install --no-cache-dir -r requirements.lock && \
+    python -c "import torch; assert torch.__version__.startswith('2.7.1'); assert torch.version.cuda == '12.8'; assert 'sm_120' in torch.cuda.get_arch_list()"
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN python -m pip install --upgrade pip && python -m pip install --no-deps . && \
-    python -m pip install "numpy>=1.26,<3" "psutil>=5.9,<8" "PyYAML>=6,<7" "sympy>=1.12,<2"
+RUN python -m pip install --no-build-isolation --no-deps .
 COPY configs ./configs
 ENTRYPOINT ["python", "-m", "fly_abstraction"]
-CMD ["doctor"]
+CMD ["doctor-gpu"]
 

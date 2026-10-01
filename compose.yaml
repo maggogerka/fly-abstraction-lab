@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.gpu
-    command: ["--profile", "paper_gpu", "doctor"]
+    command: ["--profile", "smoke_gpu", "doctor-gpu"]
     volumes:
       - ./configs:/workspace/configs:ro
       - ./data:/workspace/data

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,16 +11,15 @@ requires-python = ">=3.11,<3.13"
 license = {file = "LICENSE"}
 authors = [{name = "maggogerka"}]
 dependencies = [
-  "numpy>=1.26,<3",
-  "psutil>=5.9,<8",
-  "PyYAML>=6.0,<7",
-  "sympy>=1.12,<2",
-  "torch>=2.2,<3",
+  "numpy==2.2.6",
+  "psutil==7.0.0",
+  "PyYAML==6.0.2",
+  "sympy==1.14.0",
+  "torch==2.7.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
-parquet = ["pandas>=2.2,<3", "pyarrow>=16,<22"]
+dev = ["pytest==8.4.1", "ruff==0.12.7"]
 
 [project.scripts]
 fly-abstraction = "fly_abstraction.cli:main"

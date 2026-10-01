@@ -17,12 +17,13 @@ class SparseGraphCell(nn.Module):
         self.num_nodes = graph.num_nodes
         self.register_buffer("edge_index", graph.edge_index.clone())
         self.register_buffer("base_weight", graph.edge_weight.float().clone())
+        self.register_buffer("input_nodes", graph.input_nodes.clone())
         edge_scale = torch.ones(graph.num_edges)
         if trainable_edges:
             self.edge_scale = nn.Parameter(edge_scale)
         else:
             self.register_buffer("edge_scale", edge_scale)
-        self.input_projection = nn.Linear(input_size, graph.num_nodes)
+        self.input_projection = nn.Linear(input_size, graph.input_nodes.numel())
         self.bias = nn.Parameter(torch.zeros(graph.num_nodes))
 
     def forward(self, features: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
@@ -30,7 +31,9 @@ class SparseGraphCell(nn.Module):
         messages = state[:, source] * (self.base_weight * self.edge_scale)
         recurrent = torch.zeros_like(state)
         recurrent.index_add_(1, target, messages)
-        return torch.tanh(self.input_projection(features) + recurrent + self.bias)
+        injected = torch.zeros_like(state)
+        injected.index_copy_(1, self.input_nodes, self.input_projection(features))
+        return torch.tanh(injected + recurrent + self.bias)
 
 
 class _ConnectomeSequenceModel(MathModel):
@@ -47,11 +50,12 @@ class _ConnectomeSequenceModel(MathModel):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.cell = SparseGraphCell(graph, embedding_dim + 1, trainable_edges)
+        self.register_buffer("output_nodes", graph.output_nodes.clone())
         self.answer_head = nn.Sequential(
-            nn.LayerNorm(graph.num_nodes),
-            nn.Linear(graph.num_nodes, 1),
+            nn.LayerNorm(graph.output_nodes.numel()),
+            nn.Linear(graph.output_nodes.numel(), 1),
         )
-        self.expression_head = nn.Linear(graph.num_nodes, expression_vocab_size)
+        self.expression_head = nn.Linear(graph.output_nodes.numel(), expression_vocab_size)
         if fixed_reservoir:
             for parameter in self.embedding.parameters():
                 parameter.requires_grad_(False)
@@ -74,9 +78,11 @@ class _ConnectomeSequenceModel(MathModel):
             state = self.cell(features, state)
             states.append(state)
         sequence = torch.stack(states, dim=1)
+        readout_state = state[:, self.output_nodes]
+        readout_sequence = sequence[:, :, self.output_nodes]
         output = ModelOutput(
-            answer=self.answer_head(state).squeeze(-1),
-            expression_logits=self.expression_head(sequence),
+            answer=self.answer_head(readout_state).squeeze(-1),
+            expression_logits=self.expression_head(readout_sequence),
             hidden=state,
         )
         self.assert_finite(output)

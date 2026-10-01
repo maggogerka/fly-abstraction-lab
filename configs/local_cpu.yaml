@@ -1,8 +1,11 @@
 profile: local_cpu
 data:
   max_examples: 500
+  sequence_length: 96
 graph:
   max_graph_nodes: 128
+  expected_num_nodes: 128
+  expected_num_edges: 256
 model:
   hidden_size: 64
 training:

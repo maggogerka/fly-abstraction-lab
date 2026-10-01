@@ -20,7 +20,10 @@ class ModelOutput:
 class MathModel(nn.Module, ABC):
     @abstractmethod
     def forward(self, token_ids: torch.Tensor, numeric: torch.Tensor) -> ModelOutput:
-        """Map symbolic tokens plus a separate numeric channel to both task heads."""
+        """Map tokens plus a numeric channel to the numeric MVP head.
+
+        The expression head remains an architectural extension point and is not scored or trained.
+        """
 
     def parameter_counts(self) -> dict[str, int]:
         trainable = sum(

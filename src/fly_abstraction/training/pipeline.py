@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,9 +13,13 @@ from torch.utils.data import DataLoader, Dataset
 
 from fly_abstraction.data.adapters import TinyDatasetAdapter
 from fly_abstraction.data.schema import MathProblem
-from fly_abstraction.data.transforms import compositional_split, split_without_template_leakage
+from fly_abstraction.data.splits import (
+    apply_split_manifest,
+    build_split_manifest,
+    materialize_split_manifest,
+)
 from fly_abstraction.graph.connectome import ConnectomeGraph, tiny_synthetic_graph
-from fly_abstraction.graph.controls import erdos_renyi_matched
+from fly_abstraction.graph.controls import apply_graph_variant, erdos_renyi_matched
 from fly_abstraction.graph.flywire import FlyWireFAFBV783Adapter
 from fly_abstraction.models.base import MODEL_EXTENSIONS, MathModel, resolve_device
 from fly_abstraction.models.baselines import GRUBaseline, MLPBaseline
@@ -26,6 +29,7 @@ from fly_abstraction.models.connectome import (
     TrainableConnectomeRNN,
 )
 from fly_abstraction.models.encoding import CharacterEncoder
+from fly_abstraction.resources import enforce_resource_guard, estimate_resources
 from fly_abstraction.training.artifacts import RunArtifacts, build_manifest
 from fly_abstraction.training.metrics import evaluate_records
 from fly_abstraction.utils import read_jsonl, set_seeds
@@ -57,16 +61,13 @@ class PreparedExperiment:
     train_loader: DataLoader[dict[str, torch.Tensor]]
     validation_loader: DataLoader[dict[str, torch.Tensor]]
     test_loader: DataLoader[dict[str, torch.Tensor]]
-
-
-def _source_bucket(problem: MathProblem, seed: int) -> int:
-    digest = hashlib.sha256(f"{seed}|{problem.source_id}".encode()).digest()
-    return int.from_bytes(digest[:2], "big") % 5
+    split_manifest_path: Path
+    split_manifest_sha256: str
 
 
 def _load_splits(
     config: dict[str, Any],
-) -> tuple[list[MathProblem], list[MathProblem], list[MathProblem]]:
+) -> tuple[list[MathProblem], list[MathProblem], list[MathProblem], Path, str]:
     path = Path(config["data"]["path"])
     if not path.is_file():
         raise FileNotFoundError(f"Prepared data not found: {path}; run data prepare-tiny first")
@@ -75,19 +76,17 @@ def _load_splits(
         problems = [TinyDatasetAdapter().adapt(record) for record in records]
     else:
         problems = [MathProblem.from_dict(record) for record in records]
-    train_pool, held_out = split_without_template_leakage(
+    manifest = build_split_manifest(
         problems,
-        float(config["data"]["held_out_template_fraction"]),
-        int(config["seed"]),
+        dataset=str(config["data"]["dataset"]),
+        dataset_version=str(config["data"]["version"]),
+        seed=int(config["seed"]),
+        held_out_template_fraction=float(config["data"]["held_out_template_fraction"]),
+        validation_fraction=float(config["data"]["validation_fraction"]),
     )
-    validation = [item for item in train_pool if _source_bucket(item, config["seed"]) == 0]
-    train = [item for item in train_pool if _source_bucket(item, config["seed"]) != 0]
-    if not train or not validation or not held_out:
-        raise ValueError(
-            "Prepared data is too small for non-empty train/validation/held-out splits"
-        )
-    test = [compositional_split(item, config["seed"]) for item in held_out]
-    return train, validation, test
+    manifest_path = materialize_split_manifest(Path(config["data"]["split_manifest_dir"]), manifest)
+    train, validation, test = apply_split_manifest(problems, manifest)
+    return train, validation, test, manifest_path, str(manifest["sha256"])
 
 
 def _build_model(config: dict[str, Any], graph: ConnectomeGraph) -> MathModel:
@@ -130,13 +129,14 @@ def prepare_experiment(config: dict[str, Any]) -> PreparedExperiment:
         )
     else:
         raise ValueError(f"Unknown graph kind: {config['graph']['kind']}")
+    graph = apply_graph_variant(graph, str(config["graph"]["variant"]), int(config["seed"]))
     graph = graph.normalized(str(config["graph"]["normalization"]))
     model = _build_model(config, graph)
     encoder = CharacterEncoder(
         vocab_size=int(config["model"]["vocab_size"]),
-        max_length=96,
+        max_length=int(config["data"]["sequence_length"]),
     )
-    train, validation, test = _load_splits(config)
+    train, validation, test, split_path, split_sha256 = _load_splits(config)
     loader_options = {
         "batch_size": int(config["training"]["batch_size"]),
         "num_workers": int(config["training"]["num_workers"]),
@@ -144,11 +144,18 @@ def prepare_experiment(config: dict[str, Any]) -> PreparedExperiment:
     return PreparedExperiment(
         model=model,
         graph=graph,
-        train_loader=DataLoader(EncodedDataset(train, encoder), shuffle=True, **loader_options),
+        train_loader=DataLoader(
+            EncodedDataset(train, encoder),
+            shuffle=True,
+            generator=torch.Generator().manual_seed(int(config["seed"])),
+            **loader_options,
+        ),
         validation_loader=DataLoader(
             EncodedDataset(validation, encoder), shuffle=False, **loader_options
         ),
         test_loader=DataLoader(EncodedDataset(test, encoder), shuffle=False, **loader_options),
+        split_manifest_path=split_path,
+        split_manifest_sha256=split_sha256,
     )
 
 
@@ -157,13 +164,10 @@ def _losses(
     output_expression: torch.Tensor,
     batch: dict[str, torch.Tensor],
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    del output_expression
     answer_loss = nn.functional.mse_loss(output_answer, batch["answer"])
-    expression_loss = nn.functional.cross_entropy(
-        output_expression.flatten(0, 1),
-        batch["expression_targets"].flatten(),
-        ignore_index=0,
-    )
-    return answer_loss + 0.1 * expression_loss, answer_loss, expression_loss
+    unused_expression_loss = answer_loss.new_zeros(())
+    return answer_loss, answer_loss, unused_expression_loss
 
 
 def _move(batch: dict[str, torch.Tensor], device: torch.device) -> dict[str, torch.Tensor]:
@@ -189,7 +193,7 @@ def _evaluate_loader(
         losses.append(float(loss))
         if include_predictions:
             for row, prediction in zip(
-                raw_batch["index"].tolist(), output.answer.tolist(), strict=True
+                raw_batch["index"].tolist(), output.answer.detach().cpu().tolist(), strict=True
             ):
                 problem = dataset.problems[row]
                 records.append(
@@ -197,18 +201,31 @@ def _evaluate_loader(
                         "source_id": problem.source_id,
                         "template_id": problem.template_id,
                         "split": problem.split,
-                        "prediction": format(prediction, ".12g"),
-                        "target": problem.answer,
+                        "target_mode": "numeric",
+                        "prediction": float(prediction),
+                        "target": problem.numeric_target,
                     }
                 )
     return sum(losses) / max(1, len(losses)), records
 
 
 def train_experiment(
-    config: dict[str, Any], *, run_id: str | None = None, resume: Path | None = None
+    config: dict[str, Any],
+    *,
+    run_id: str | None = None,
+    resume: Path | None = None,
+    resource_estimate_accepted: bool = False,
 ) -> Path:
     """Execute a confirmed run. Callers are responsible for CLI safety confirmation."""
+    expected_estimate = estimate_resources(config)
+    enforce_resource_guard(config, expected_estimate, accepted=resource_estimate_accepted)
     prepared = prepare_experiment(config)
+    actual_estimate = estimate_resources(
+        config,
+        actual_nodes=prepared.graph.num_nodes,
+        actual_edges=prepared.graph.num_edges,
+    )
+    enforce_resource_guard(config, actual_estimate, accepted=resource_estimate_accepted)
     device = resolve_device(str(config["runtime"]["device"]))
     model = prepared.model.to(device)
     training = config["training"]
@@ -234,7 +251,13 @@ def train_experiment(
     data_path = Path(config["data"]["path"])
     artifacts.write_json(
         "run_manifest.json",
-        build_manifest(config, data_path, prepared.graph.content_hash(), int(config["seed"])),
+        build_manifest(
+            config,
+            data_path,
+            prepared.graph.content_hash(),
+            int(config["seed"]),
+            split_manifest_sha256=prepared.split_manifest_sha256,
+        ),
     )
 
     history: list[dict[str, Any]] = []
@@ -278,7 +301,7 @@ def train_experiment(
     if best_state is not None:
         model.load_state_dict(best_state)
     test_loss, predictions = _evaluate_loader(model, prepared.test_loader, device, True)
-    metrics = evaluate_records(predictions)
+    metrics = evaluate_records(predictions, **config["task"]["metrics"])
     metrics["test_loss"] = test_loss
     artifacts.write_history(history)
     artifacts.write_predictions(predictions)

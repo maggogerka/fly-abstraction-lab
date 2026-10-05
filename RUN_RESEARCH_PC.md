@@ -40,6 +40,10 @@ download the current `main` ZIP or bypass only the CMD wrapper with:
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup_friend_pc.ps1" -Action Guided
 ```
 
+If an older copy says that `nvidia-smi` failed after it already printed a valid RTX 5070,
+driver version, and VRAM value, replace the old extracted directory with the current
+`main` ZIP. The current script captures the native exit code before processing its output.
+
 The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
 UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot
 training. UCI download requires `DOWNLOAD UCI`; training requires `TRAIN PILOT`.

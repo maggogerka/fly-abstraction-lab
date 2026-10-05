@@ -34,6 +34,9 @@ Last updated: 2026-10-05
 - Windows ZIP launcher hotfix: `START_HERE.cmd` is ASCII-only, uses the absolute system
   PowerShell 5.1 path, and avoids locale-dependent CMD parsing. The documented direct
   PowerShell command bypasses the wrapper if an old ZIP is still in use.
+- The Windows GPU check captures `nvidia-smi`'s native exit code before any PowerShell
+  pipeline. Valid RTX 5070 output is therefore not rejected because of a stale
+  `$LASTEXITCODE` value in Windows PowerShell 5.1.
 
 ## Leakage, data, and reproducibility
 

@@ -107,11 +107,21 @@ function Test-FriendPc([switch]$OfferInstall) {
 
     $nvidiaSmi = Find-NvidiaSmi
     if ($nvidiaSmi) {
-        $gpuLine = & $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | Select-Object -First 1
-        if ($LASTEXITCODE -ne 0) {
-            throw "nvidia-smi найден, но не работает: $gpuLine"
+        # Save the native exit code before invoking another PowerShell command.
+        # Windows PowerShell 5.1 can otherwise expose a stale $LASTEXITCODE.
+        $gpuOutput = @(& $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1)
+        $gpuExitCode = $LASTEXITCODE
+        $gpuLine = $gpuOutput | Select-Object -First 1
+        if ($gpuExitCode -ne 0) {
+            throw "nvidia-smi найден, но не работает (код $gpuExitCode): $($gpuOutput -join ' ')"
+        }
+        if (-not $gpuLine) {
+            throw "nvidia-smi не вернул сведения о GPU."
         }
         $parts = @($gpuLine -split ',' | ForEach-Object { $_.Trim() })
+        if ($parts.Count -lt 3) {
+            throw "Неожиданный формат ответа nvidia-smi: $gpuLine"
+        }
         $report.nvidia_smi = $true
         $report.gpu = $parts[0]
         $report.driver = if ($parts.Count -gt 1) { $parts[1] } else { 'unknown' }

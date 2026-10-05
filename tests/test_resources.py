@@ -26,3 +26,14 @@ def test_resource_guard_rejects_dangerous_parameters() -> None:
     estimate = estimate_resources(config, available_ram_bytes=1024**3, available_vram_bytes=0)
     with pytest.raises(ResourceGuardError, match="Reduce nodes, edges, batch size"):
         enforce_resource_guard(config, estimate)
+
+
+def test_pilot_estimate_fits_12_gib_rtx_5070_headroom() -> None:
+    config = load_config("pilot_gpu")
+    estimate = estimate_resources(
+        config,
+        available_ram_bytes=32 * 1024**3,
+        available_vram_bytes=12 * 1024**3,
+    )
+    enforce_resource_guard(config, estimate)
+    assert estimate.estimated_vram_bytes < 12 * 1024**3 * 0.8

@@ -1,6 +1,7 @@
-# Быстрый запуск на ПК с RTX 5090
+# Быстрый запуск на ПК с RTX 5070/50-series
 
-Нужна 64-битная Windows 10/11, RTX 5090 и желательно не менее 25 GB свободного места.
+Нужна 64-битная Windows 10/11, GeForce RTX 5070 или другая Blackwell RTX 50-series и
+желательно не менее 25 GB свободного места.
 Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устанавливать не нужно.
 
 1. Скачайте ZIP ветки `feat/research-pc-readiness` и распакуйте его либо выполните:
@@ -13,6 +14,14 @@ Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устан�
 2. Дважды щёлкните `START_HERE.cmd`. Скрипт проверит Windows x64, место, драйвер NVIDIA,
    WSL2, Git, Docker Desktop/Compose/engine, соберёт закреплённый образ и выполнит GPU
    doctor и smoke. Логи останутся в `results/diagnostics/`.
+
+   Если старая копия из ZIP выводит ошибку вида `'shell.exe' is not recognized`, удалите
+   её и скачайте свежий ZIP `main`. Для немедленного запуска без CMD-обёртки откройте
+   Windows PowerShell в корне проекта и выполните:
+
+   ```text
+   powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup_friend_pc.ps1" -Action Guided
+   ```
 
 3. Если нет Git или Docker Desktop, установка через `winget` начнётся только после
    точной фразы, показанной скриптом. Драйвер NVIDIA устанавливайте только вручную с

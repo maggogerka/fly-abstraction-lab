@@ -1,6 +1,7 @@
-# RTX 5090 research-PC workflow
+# RTX 5070/50-series research-PC workflow
 
-This workflow targets a clean 64-bit Windows 10/11 PC with RTX 5090 and 32 GB RAM.
+This workflow targets a clean 64-bit Windows 10/11 PC with RTX 5070 (or another Blackwell
+RTX 50-series GPU) and 32 GB RAM.
 The host needs only an up-to-date NVIDIA driver, WSL2, Git (unless using a ZIP), and
 Docker Desktop with the WSL2 engine. Do **not** install host Python, PyTorch, CUDA Toolkit,
 or cuDNN: Python 3.11, PyTorch 2.7.1, CUDA 12.8, and cuDNN 9 are pinned inside Docker.
@@ -30,6 +31,15 @@ The NVIDIA driver is never installed automatically. If WSL2, Docker Desktop, or 
 driver was just installed/updated, reboot Windows when instructed and run `START_HERE.cmd`
 again. The script is idempotent; closing it does not remove `data/` or `results/`.
 
+`START_HERE.cmd` is deliberately ASCII-only, uses the explicit Windows PowerShell 5.1
+path, and contains no locale-dependent CMD text, so GitHub ZIP downloads do not depend on
+the machine's legacy code page. If an older ZIP reports `'shell.exe' is not recognized`,
+download the current `main` ZIP or bypass only the CMD wrapper with:
+
+```text
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup_friend_pc.ps1" -Action Guided
+```
+
 The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
 UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot
 training. UCI download requires `DOWNLOAD UCI`; training requires `TRAIN PILOT`.
@@ -51,8 +61,9 @@ docker compose --profile research run --rm research-gpu doctor-gpu | Tee-Object 
 docker compose --profile research run --rm research-gpu smoke-gpu | Tee-Object results\diagnostics\smoke-gpu.log
 ```
 
-Stop if `blackwell_ready` is false, CUDA is absent, the GPU is not the expected RTX 5090,
-or available VRAM is materially below expectation. `smoke-gpu` performs one tiny mixed-
+Stop if `blackwell_ready` is false, CUDA is absent, the GPU is not the expected RTX 5070/
+50-series model, or available VRAM is materially below that model's specification.
+`smoke-gpu` performs one tiny mixed-
 precision forward/backward and reports `optimizer_step: false`; it is not training.
 
 ## UCI technical pilot data

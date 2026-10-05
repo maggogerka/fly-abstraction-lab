@@ -49,8 +49,13 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
     cmd = (root / "START_HERE.cmd").read_text(encoding="utf-8")
     script = (root / "scripts" / "setup_friend_pc.ps1").read_text(encoding="utf-8-sig")
     assert "setup_friend_pc.ps1" in cmd
+    assert cmd.isascii()
+    assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in cmd
+    assert "chcp" not in cmd.lower()
     assert "TRAIN PILOT" in script
     assert "DOWNLOAD UCI" in script
+    assert "Find-NvidiaSmi" in script
+    assert "RTX 5090" not in script
     assert "--confirm-download" in script
     assert "--confirm-train" in script
     assert "pip install" not in script

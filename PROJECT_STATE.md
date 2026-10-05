@@ -37,6 +37,9 @@ Last updated: 2026-10-05
 - The Windows GPU check captures `nvidia-smi`'s native exit code before any PowerShell
   pipeline. Valid RTX 5070 output is therefore not rejected because of a stale
   `$LASTEXITCODE` value in Windows PowerShell 5.1.
+- Native Docker commands temporarily use non-terminating stderr handling because Compose
+  emits ordinary build progress there. The wrapper restores strict error handling and
+  uses Docker's actual exit code, preventing false failures on `Image ... Building`.
 
 ## Leakage, data, and reproducibility
 

@@ -63,8 +63,17 @@ function Invoke-Logged([string]$Name, [string[]]$Arguments, [string]$LogName) {
     New-Item -ItemType Directory -Force -Path $script:Diagnostics | Out-Null
     $logPath = Join-Path $script:Diagnostics $LogName
     Write-Host "Команда: $Name $($Arguments -join ' ')"
-    & $Name @Arguments 2>&1 | Tee-Object -FilePath $logPath
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 wraps native stderr as PowerShell errors. Docker
+        # Compose writes normal progress (for example, "Image ... Building") to
+        # stderr, so global Stop would abort a healthy build before its exit code.
+        $ErrorActionPreference = 'Continue'
+        & $Name @Arguments 2>&1 | Tee-Object -FilePath $logPath
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($exitCode -ne 0) {
         throw "Команда завершилась с кодом $exitCode. Полный лог: $logPath"
     }

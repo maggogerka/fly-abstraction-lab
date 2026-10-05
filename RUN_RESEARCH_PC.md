@@ -44,6 +44,11 @@ If an older copy says that `nvidia-smi` failed after it already printed a valid 
 driver version, and VRAM value, replace the old extracted directory with the current
 `main` ZIP. The current script captures the native exit code before processing its output.
 
+Likewise, `Image ... Building` is normal Docker Compose progress, not an error. Older
+Windows PowerShell 5.1 wrappers could stop on that stderr line. The current wrapper lets
+the native command finish, logs both streams, and decides success from Docker's exit code.
+The first pinned PyTorch image download is roughly 4 GB and can take several minutes.
+
 The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
 UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot
 training. UCI download requires `DOWNLOAD UCI`; training requires `TRAIN PILOT`.

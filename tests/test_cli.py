@@ -61,6 +61,10 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
         "$gpuLine = $gpuOutput | Select-Object -First 1"
     )
     assert "if ($gpuExitCode -ne 0)" in script
+    assert "$previousErrorActionPreference = $ErrorActionPreference" in script
+    assert "$ErrorActionPreference = 'Continue'" in script
+    assert "$ErrorActionPreference = $previousErrorActionPreference" in script
+    assert "if ($exitCode -ne 0)" in script
     assert "RTX 5090" not in script
     assert "--confirm-download" in script
     assert "--confirm-train" in script

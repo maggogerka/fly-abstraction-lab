@@ -28,6 +28,23 @@ function Read-Exact([string]$Prompt, [string]$Expected) {
     return $answer -ceq $Expected
 }
 
+function Find-NvidiaSmi {
+    $command = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+    $candidates = @(
+        (Join-Path $env:WINDIR 'System32\nvidia-smi.exe'),
+        (Join-Path $env:ProgramFiles 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
 function Install-WithWinget([string]$Id, [string]$Name, [string]$Confirmation) {
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         throw "winget не найден. Установите $Name вручную и повторите запуск."
@@ -88,8 +105,9 @@ function Test-FriendPc([switch]$OfferInstall) {
         Write-Host "Свободное место: $($report.disk_free_gib) GB" -ForegroundColor Green
     }
 
-    if (Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue) {
-        $gpuLine = & nvidia-smi.exe --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | Select-Object -First 1
+    $nvidiaSmi = Find-NvidiaSmi
+    if ($nvidiaSmi) {
+        $gpuLine = & $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | Select-Object -First 1
         if ($LASTEXITCODE -ne 0) {
             throw "nvidia-smi найден, но не работает: $gpuLine"
         }
@@ -99,13 +117,18 @@ function Test-FriendPc([switch]$OfferInstall) {
         $report.driver = if ($parts.Count -gt 1) { $parts[1] } else { 'unknown' }
         $report.vram = if ($parts.Count -gt 2) { $parts[2] } else { 'unknown' }
         Write-Host "GPU: $($report.gpu); драйвер: $($report.driver); VRAM: $($report.vram)" -ForegroundColor Green
+        if ($report.gpu -match 'RTX 50\d{2}') {
+            Write-Host 'Обнаружена совместимая GeForce RTX 50-series. Точная проверка sm_120 выполняется внутри Docker.' -ForegroundColor Green
+        } else {
+            Write-Warning 'Название GPU не похоже на GeForce RTX 50-series. Продолжение возможно, но итоговое решение принимает doctor-gpu по CUDA и compute capability.'
+        }
         $driverMajor = 0
         [void][int]::TryParse(($report.driver -split '\.')[0], [ref]$driverMajor)
         if ($driverMajor -lt 570) {
             throw "Драйвер NVIDIA $($report.driver) слишком стар для целевого CUDA 12.8 runtime. Установите актуальный Game Ready/Studio Driver вручную с https://www.nvidia.com/Download/index.aspx, перезагрузите Windows и повторите запуск. Драйвер автоматически не устанавливается."
         }
     } else {
-        throw 'nvidia-smi не найден. Установите драйвер RTX 5090 вручную с https://www.nvidia.com/Download/index.aspx, перезагрузите Windows и повторите запуск. Скрипт не устанавливает драйвер автоматически.'
+        throw 'nvidia-smi не найден. Установите актуальный драйвер NVIDIA для GeForce RTX 5070/50-series вручную с https://www.nvidia.com/Download/index.aspx, перезагрузите Windows и повторите запуск. Скрипт не устанавливает драйвер автоматически.'
     }
 
     if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {

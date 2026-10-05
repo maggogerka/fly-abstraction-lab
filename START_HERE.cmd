@@ -1,18 +1,27 @@
 @echo off
 setlocal
-chcp 65001 >nul
 cd /d "%~dp0"
-title Fly Abstraction Lab - RTX 5090 setup
-echo Запуск безопасной проверки и настройки Docker для RTX 5090...
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup_friend_pc.ps1" -Action Guided
+title Fly Abstraction Lab - RTX 50-series setup
+set "PS_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if not exist "%PS_EXE%" goto no_powershell
+echo Starting the safe RTX 50-series Docker setup...
+"%PS_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup_friend_pc.ps1" -Action Guided
 set "SETUP_EXIT=%ERRORLEVEL%"
-if not "%SETUP_EXIT%"=="0" (
-  echo.
-  echo ОШИБКА: настройка остановлена. Прочитайте сообщение выше и запустите START_HERE.cmd снова.
-) else (
-  echo.
-  echo Проверка завершена. Данные и результаты сохранены в папках data и results.
-)
+if not "%SETUP_EXIT%"=="0" goto failed
+echo.
+echo Setup finished. Data and results remain in the data and results folders.
+goto finish
+
+:no_powershell
+set "SETUP_EXIT=1"
+echo ERROR: Windows PowerShell 5.1 was not found at "%PS_EXE%".
+goto finish
+
+:failed
+echo.
+echo ERROR: setup stopped. Read the message above and run START_HERE.cmd again.
+
+:finish
 echo.
 pause
 exit /b %SETUP_EXIT%

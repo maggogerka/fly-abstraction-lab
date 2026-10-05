@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 ## Current branch and scope
 
@@ -31,6 +31,9 @@ Last updated: 2026-10-02
   retain logs under `results/diagnostics`.
 - Host Python, PyTorch, CUDA Toolkit, and cuDNN are not required. Dataset and training menu
   actions remain separate. UCI needs `DOWNLOAD UCI`; pilot training needs `TRAIN PILOT`.
+- Windows ZIP launcher hotfix: `START_HERE.cmd` is ASCII-only, uses the absolute system
+  PowerShell 5.1 path, and avoids locale-dependent CMD parsing. The documented direct
+  PowerShell command bypasses the wrapper if an old ZIP is still in use.
 
 ## Leakage, data, and reproducibility
 
@@ -68,7 +71,7 @@ Last updated: 2026-10-02
 
 - `ruff format --check .`: passed (49 files already formatted).
 - `ruff check .`: passed.
-- `pytest -q`: 50 passed, 1 skipped. The only skip is the Blackwell GPU smoke test because
+- `pytest -q`: 52 passed, 1 skipped. The only skip is the Blackwell GPU smoke test because
   this machine has CPU-only PyTorch/CUDA unavailable.
 - `doctor`: passed on Python 3.11.9. The existing developer venv has PyTorch 2.14.1+cpu;
   target Docker environments remain pinned to PyTorch 2.7.1.
@@ -86,7 +89,7 @@ Last updated: 2026-10-02
 
 ## Known limitations
 
-- Actual RTX 5090 behavior, Windows guided setup, image build, `doctor-gpu`, `smoke-gpu`,
+- Actual RTX 5070/50-series behavior, Windows guided setup, image build, `doctor-gpu`, `smoke-gpu`,
   UCI acquisition, and the pilot must be run manually on the friend's PC.
 - The UCI API publishes no advance digest. Confirmed acquisition computes and records the
   received SHA256; compare the manifest between machines.
@@ -102,6 +105,6 @@ Last updated: 2026-10-02
 
 ## Next manual action
 
-On the RTX 5090 PC, use `FRIEND_QUICKSTART_RU.md` or `RUN_RESEARCH_PC.md`: clone/unpack,
+On the RTX 5070/50-series PC, use `FRIEND_QUICKSTART_RU.md` or `RUN_RESEARCH_PC.md`: clone/unpack,
 run `START_HERE.cmd`, inspect diagnostics, separately confirm UCI download/preparation,
 run the pilot dry-run, then explicitly confirm the pilot only if all checks pass.

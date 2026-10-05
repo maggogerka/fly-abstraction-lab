@@ -40,6 +40,9 @@ Last updated: 2026-10-05
 - Native Docker commands temporarily use non-terminating stderr handling because Compose
   emits ordinary build progress there. The wrapper restores strict error handling and
   uses Docker's actual exit code, preventing false failures on `Image ... Building`.
+- The GPU Dockerfile reads PyTorch's compile-time CUDA flags directly during its no-GPU
+  build stage. Runtime `doctor-gpu` still requires a visible device and validates the
+  public architecture list, fixing the false build failure from `get_arch_list() == []`.
 
 ## Leakage, data, and reproducibility
 

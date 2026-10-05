@@ -69,7 +69,7 @@ function Invoke-Logged([string]$Name, [string[]]$Arguments, [string]$LogName) {
         # Compose writes normal progress (for example, "Image ... Building") to
         # stderr, so global Stop would abort a healthy build before its exit code.
         $ErrorActionPreference = 'Continue'
-        & $Name @Arguments 2>&1 | Tee-Object -FilePath $logPath
+        & $Name @Arguments 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath $logPath
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference

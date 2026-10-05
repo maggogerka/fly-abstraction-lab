@@ -43,6 +43,9 @@ Last updated: 2026-10-05
 - The GPU Dockerfile reads PyTorch's compile-time CUDA flags directly during its no-GPU
   build stage. Runtime `doctor-gpu` still requires a visible device and validates the
   public architecture list, fixing the false build failure from `get_arch_list() == []`.
+- Sparse input injection now converts autocast linear output back to the recurrent-state
+  dtype before `index_copy_`. This fixes the RTX 5070 BF16 smoke failure while retaining
+  mixed-precision matrix multiplication and FP32 recurrent accumulation.
 
 ## Leakage, data, and reproducibility
 

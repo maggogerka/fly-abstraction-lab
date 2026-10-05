@@ -23,6 +23,20 @@ def test_single_forward_backward_without_optimizer_step() -> None:
     assert model.parameter_counts()["trainable"] > graph.num_edges
 
 
+def test_connectome_forward_backward_under_bfloat16_autocast() -> None:
+    graph = tiny_synthetic_graph(8, 17).normalized()
+    model = TrainableConnectomeRNN(graph, vocab_size=32, embedding_dim=4, expression_vocab_size=32)
+    token_ids = torch.randint(0, 32, (2, 6))
+    numeric = torch.zeros(2, 6, 1)
+    with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        output = model(token_ids, numeric)
+        loss = output.answer.float().square().mean()
+    loss.backward()
+    assert torch.isfinite(output.answer).all()
+    assert model.cell.edge_scale.grad is not None
+    assert torch.isfinite(model.cell.edge_scale.grad).all()
+
+
 def test_all_required_model_types_construct() -> None:
     graph = tiny_synthetic_graph(8, 17)
     models = [

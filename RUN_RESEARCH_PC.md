@@ -51,6 +51,9 @@ The first pinned PyTorch image download is roughly 4 GB and can take several min
 The build checks `sm_120` through PyTorch's compile-time flags because Docker builds do
 not expose the host GPU. The subsequent `doctor-gpu` validates the public architecture
 list, the visible RTX device, compute capability, VRAM, and mixed-precision support.
+The sparse recurrent cell keeps its accumulation state in FP32 and explicitly converts
+autocast projection output before indexed injection, so BF16/FP16 smoke and pilot paths
+do not fail with an `index_copy_` dtype mismatch.
 
 The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
 UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot

@@ -36,6 +36,10 @@ Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устан�
    `Dockerfile.gpu`, скачайте свежий ZIP `main`. Раньше build-time проверка ошибочно
    запрашивала видимую видеокарту, хотя Docker не предоставляет GPU во время сборки.
 
+   Ошибка `index_copy_(): self and source expected to have the same dtype` в старом
+   `smoke-gpu` также исправлена в свежем ZIP. Она относилась к BF16 autocast модели,
+   а не к RTX 5070 или драйверу.
+
 3. Если нет Git или Docker Desktop, установка через `winget` начнётся только после
    точной фразы, показанной скриптом. Драйвер NVIDIA устанавливайте только вручную с
    официального сайта. После WSL/Docker/драйвера перезагрузите Windows и повторите шаг 2.

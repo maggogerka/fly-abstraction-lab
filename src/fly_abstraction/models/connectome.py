@@ -32,7 +32,10 @@ class SparseGraphCell(nn.Module):
         recurrent = torch.zeros_like(state)
         recurrent.index_add_(1, target, messages)
         injected = torch.zeros_like(state)
-        injected.index_copy_(1, self.input_nodes, self.input_projection(features))
+        projected = self.input_projection(features)
+        # Autocast may return BF16/FP16 from the linear layer while the recurrent
+        # state intentionally remains FP32. index_copy_ requires identical dtypes.
+        injected.index_copy_(1, self.input_nodes, projected.to(dtype=injected.dtype))
         return torch.tanh(injected + recurrent + self.bias)
 
 

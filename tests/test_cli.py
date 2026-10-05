@@ -55,6 +55,12 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
     assert "TRAIN PILOT" in script
     assert "DOWNLOAD UCI" in script
     assert "Find-NvidiaSmi" in script
+    assert "$gpuOutput = @(& $nvidiaSmi" in script
+    assert "$gpuExitCode = $LASTEXITCODE" in script
+    assert script.index("$gpuExitCode = $LASTEXITCODE") < script.index(
+        "$gpuLine = $gpuOutput | Select-Object -First 1"
+    )
+    assert "if ($gpuExitCode -ne 0)" in script
     assert "RTX 5090" not in script
     assert "--confirm-download" in script
     assert "--confirm-train" in script

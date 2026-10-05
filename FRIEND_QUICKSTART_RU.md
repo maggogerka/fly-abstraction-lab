@@ -23,6 +23,10 @@ Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устан�
    powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup_friend_pc.ps1" -Action Guided
    ```
 
+   Если старая версия пишет `nvidia-smi найден, но не работает`, но перед этим уже
+   показывает RTX 5070, драйвер и VRAM, это ошибка старого скрипта, а не видеокарты.
+   Удалите старую распакованную папку и скачайте свежий ZIP ветки `main`.
+
 3. Если нет Git или Docker Desktop, установка через `winget` начнётся только после
    точной фразы, показанной скриптом. Драйвер NVIDIA устанавливайте только вручную с
    официального сайта. После WSL/Docker/драйвера перезагрузите Windows и повторите шаг 2.

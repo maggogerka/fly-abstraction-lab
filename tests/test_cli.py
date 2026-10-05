@@ -70,3 +70,11 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
     assert "--confirm-train" in script
     assert "pip install" not in script
     assert "CUDA Toolkit" in script
+
+
+def test_gpu_docker_build_arch_check_does_not_require_visible_gpu() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dockerfile = (root / "Dockerfile.gpu").read_text(encoding="utf-8")
+    assert "torch._C._cuda_getArchFlags()" in dockerfile
+    assert "'sm_120' in arches" in dockerfile
+    assert "torch.cuda.get_arch_list()" not in dockerfile

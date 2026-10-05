@@ -30,7 +30,8 @@ identical manifest.
 - PyTorch 2.7 introduced Blackwell support and CUDA 12.8 wheels; see the
   [official PyTorch 2.7 release post](https://pytorch.org/blog/pytorch-2-7/).
 
-The GPU image build asserts PyTorch 2.7.1, CUDA 12.8, and compiled `sm_120` support.
+The GPU image build asserts PyTorch 2.7.1, CUDA 12.8, and compiled `sm_120` support
+from PyTorch's compile-time flags, which remain available while Docker builds without a GPU.
 `doctor-gpu` additionally checks the visible GPU, VRAM, compute capability, FP16/BF16/
 TF32 availability, and Blackwell readiness at runtime.
 

@@ -35,6 +35,7 @@ PROFILE_DEVICES = {
     "local_cpu": "cpu",
     "smoke_cpu": "cpu",
     "smoke_gpu": "cuda",
+    "flywire_smoke_gpu": "cuda",
     "pilot_gpu": "cuda",
     "paper_gpu": "cuda",
 }

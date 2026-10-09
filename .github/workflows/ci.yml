@@ -24,6 +24,9 @@ jobs:
       - run: python -m fly_abstraction --profile pilot_gpu show-config
       - run: python -m fly_abstraction --profile pilot_gpu train
       - run: python -m fly_abstraction data download deepmind_mathematics
+      - run: python -m fly_abstraction data download flywire_fafb_v783
+      - run: python -m fly_abstraction --profile flywire_smoke_gpu show-config
+      - run: python -m fly_abstraction --profile flywire_smoke_gpu train
 
   docker-validate:
     runs-on: ubuntu-latest

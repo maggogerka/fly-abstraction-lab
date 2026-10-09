@@ -43,8 +43,11 @@ def test_normalization_and_aggregation_are_finite() -> None:
 def test_binary_graph_round_trip_and_streaming_hash(tmp_path: Path) -> None:
     graph = tiny_synthetic_graph(16, 23)
     path = tmp_path / "graph.npz"
+    second_path = tmp_path / "graph-copy.npz"
     save_graph_npz(path, graph)
+    save_graph_npz(second_path, graph)
     loaded = load_graph_npz(path)
+    assert path.read_bytes() == second_path.read_bytes()
     assert loaded.content_hash() == graph.content_hash()
     assert torch.equal(loaded.input_nodes, graph.input_nodes)
     assert torch.equal(loaded.output_nodes, graph.output_nodes)

@@ -12,6 +12,7 @@ numpy==2.2.6
 packaging==25.0
 pluggy==1.6.0
 psutil==7.0.0
+pyarrow==20.0.0
 Pygments==2.19.1
 PyYAML==6.0.2
 sympy==1.14.0

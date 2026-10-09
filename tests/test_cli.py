@@ -37,6 +37,10 @@ def test_doctor_and_gpu_doctor_are_read_only(capsys) -> None:
 def test_registered_download_is_dry_without_confirmation(capsys) -> None:
     assert main(["data", "download", "uci_energy_efficiency"]) == 0
     assert "no download performed" in capsys.readouterr().out
+    assert main(["data", "download", "flywire_fafb_v783"]) == 0
+    output = capsys.readouterr().out
+    assert "10.5281/zenodo.10676866" in output
+    assert "f48f972d262323a102aed49af1396b8a" in output
 
 
 def test_cli_paths_cannot_escape_repository() -> None:
@@ -54,6 +58,9 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
     assert "chcp" not in cmd.lower()
     assert "TRAIN PILOT" in script
     assert "DOWNLOAD UCI" in script
+    assert "DOWNLOAD FLYWIRE V783" in script
+    assert "PREPARE FLYWIRE $Nodes" in script
+    assert "TRAIN FLYWIRE SMOKE" in script
     assert "Find-NvidiaSmi" in script
     assert "$gpuOutput = @(& $nvidiaSmi" in script
     assert "$gpuExitCode = $LASTEXITCODE" in script
@@ -69,6 +76,7 @@ def test_windows_friend_entrypoints_keep_dangerous_actions_explicit() -> None:
     assert "RTX 5090" not in script
     assert "--confirm-download" in script
     assert "--confirm-train" in script
+    assert "--confirm-prepare" in script
     assert "pip install" not in script
     assert "CUDA Toolkit" in script
 

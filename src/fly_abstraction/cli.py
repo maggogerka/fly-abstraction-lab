@@ -26,6 +26,11 @@ from fly_abstraction.data.downloads import download_registered_dataset
 from fly_abstraction.data.registry import REGISTRY, get_dataset
 from fly_abstraction.diagnostics import gpu_report, run_gpu_smoke
 from fly_abstraction.graph.flywire import convert_local_flywire_export
+from fly_abstraction.graph.flywire_v783 import (
+    inspect_graph,
+    preparation_plan,
+    prepare_flywire_v783,
+)
 from fly_abstraction.resources import enforce_resource_guard, estimate_resources
 from fly_abstraction.training.metrics import evaluate_records
 from fly_abstraction.training.pipeline import train_experiment
@@ -138,6 +143,38 @@ def command_prepare_deepmind(args: argparse.Namespace) -> int:
 def command_convert_flywire(args: argparse.Namespace) -> int:
     convert_local_flywire_export(args.edges, args.output)
     print(f"Converted authorized local export to {args.output}")
+    return 0
+
+
+def command_prepare_flywire_v783(args: argparse.Namespace) -> int:
+    plan = preparation_plan(
+        args.source,
+        args.output,
+        nodes=args.nodes,
+        min_pair_synapses=args.min_pair_synapses,
+        input_node_count=args.input_node_count,
+        output_node_count=args.output_node_count,
+        seed=args.seed,
+    )
+    print(json.dumps(plan, indent=2))
+    if not args.confirm_prepare:
+        print("DRY RUN: no graph artifacts created; pass --confirm-prepare after review")
+        return 0
+    artifacts = prepare_flywire_v783(
+        args.source,
+        args.output,
+        nodes=args.nodes,
+        min_pair_synapses=args.min_pair_synapses,
+        input_node_count=args.input_node_count,
+        output_node_count=args.output_node_count,
+        seed=args.seed,
+    )
+    print(json.dumps({key: path.as_posix() for key, path in artifacts.items()}, indent=2))
+    return 0
+
+
+def command_graph_inspect(args: argparse.Namespace) -> int:
+    print(json.dumps(inspect_graph(args.graph), indent=2))
     return 0
 
 
@@ -264,6 +301,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=_relative_path, default=Path("data/processed/flywire_fafb_v783.npz")
     )
     flywire.set_defaults(handler=command_convert_flywire)
+    prepare_flywire = graph_commands.add_parser(
+        "prepare-flywire-v783",
+        help="prepare a bounded deterministic core from the official local v783 Feather file",
+    )
+    prepare_flywire.add_argument(
+        "--source",
+        type=_relative_path,
+        default=Path("data/raw/flywire_fafb_v783/proofread_connections_783.feather"),
+    )
+    prepare_flywire.add_argument(
+        "--output",
+        type=_relative_path,
+        default=Path("data/processed/flywire_v783_core_1024.npz"),
+    )
+    prepare_flywire.add_argument("--nodes", type=int, default=1024)
+    prepare_flywire.add_argument("--min-pair-synapses", type=float, default=5)
+    prepare_flywire.add_argument("--input-node-count", type=int, default=64)
+    prepare_flywire.add_argument("--output-node-count", type=int, default=64)
+    prepare_flywire.add_argument("--seed", type=int, default=1701)
+    prepare_flywire.add_argument("--confirm-prepare", action="store_true")
+    prepare_flywire.set_defaults(handler=command_prepare_flywire_v783)
+    inspect = graph_commands.add_parser("inspect", help="inspect a prepared graph read-only")
+    inspect.add_argument("--graph", type=_relative_path, required=True)
+    inspect.set_defaults(handler=command_graph_inspect)
 
     train = commands.add_parser("train", help="dry-run unless explicitly confirmed")
     train.add_argument("--confirm-train", action="store_true")

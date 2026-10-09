@@ -35,6 +35,7 @@ def test_unknown_profile_is_rejected() -> None:
     [
         ("smoke_cpu", "cpu"),
         ("smoke_gpu", "cuda"),
+        ("flywire_smoke_gpu", "cuda"),
         ("pilot_gpu", "cuda"),
         ("paper_gpu", "cuda"),
     ],

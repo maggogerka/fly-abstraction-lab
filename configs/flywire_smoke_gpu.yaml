@@ -1,0 +1,32 @@
+profile: flywire_smoke_gpu
+seed: 1701
+data:
+  dataset: tiny
+  version: "1"
+  path: data/processed/tiny.jsonl
+  max_examples: 64
+  sequence_length: 32
+graph:
+  kind: flywire_fafb_v783
+  path: data/processed/flywire_v783_core_512.npz
+  variant: real
+  max_graph_nodes: 512
+  expected_num_nodes: 512
+  expected_num_edges: 262144
+  normalization: incoming
+model:
+  name: trainable_connectome_rnn
+  hidden_size: 512
+training:
+  max_epochs: 1
+  batch_size: 2
+  num_workers: 0
+  checkpoints: false
+runtime:
+  device: cuda
+  torch_threads: 4
+  mixed_precision: true
+resource_guard:
+  max_ram_fraction: 0.70
+  max_vram_fraction: 0.70
+  require_explicit_acceptance: false

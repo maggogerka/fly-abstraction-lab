@@ -5,7 +5,8 @@ Last updated: 2026-10-09
 ## Current branch and safety boundary
 
 - Working branch: `feat/flywire-v783-subgraph`, created from `main`.
-- Intended PR target: `main`. Merge is not part of this stage.
+- Open PR: [#8](https://github.com/maggogerka/fly-abstraction-lab/pull/8) from
+  `feat/flywire-v783-subgraph` into `main`. Merge is not part of this stage.
 - No real FlyWire/DeepMind/UCI data was downloaded. No Docker image or service was
   built/started. No CUDA command, confirmed training, pilot, sweep, paper run, or result
   analysis was executed.

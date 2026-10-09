@@ -138,15 +138,51 @@ Every control retains the exact input-node and output-node mappings. The two ran
 topology controls are explicitly directed multigraph controls, which makes generation
 linear in edge count and avoids large Python edge sets.
 
-FlyWire access and authorization are intentionally outside this repository. Given a
-user-authorized local FAFB v783 CSV already aggregated to columns
-`pre_group,post_group,synapse_count`, convert it without any network access:
+The scientific FlyWire path uses the public static
+[FlyWire Whole-brain Connectome Connectivity Data v783](https://zenodo.org/records/10676866)
+record (DOI `10.5281/zenodo.10676866`) and only the 852,022,274-byte
+`proofread_connections_783.feather` file. Zenodo publishes MD5
+`f48f972d262323a102aed49af1396b8a`; the downloader verifies it and also writes a
+streamed SHA256. The record does not declare a license in its metadata, so the project
+does not invent one: review the record and Zenodo terms before confirming.
+
+Metadata and resource review are network-free:
+
+```text
+python -m fly_abstraction data download flywire_fafb_v783
+```
+
+Downloading is a separate human action requiring `--confirm-download`. Preparation is
+also a dry-run unless `--confirm-prepare` is present:
+
+```text
+python -m fly_abstraction graph prepare-flywire-v783 --source data/raw/flywire_fafb_v783/proofread_connections_783.feather --output data/processed/flywire_v783_core_1024.npz --nodes 1024 --min-pair-synapses 5 --input-node-count 64 --output-node-count 64 --seed 1701
+python -m fly_abstraction graph inspect --graph data/processed/flywire_v783_core_1024.npz
+```
+
+The preparer reads only the four required Feather columns with PyArrow, rejects invalid
+IDs/non-finite or non-positive weights, aggregates each directed pair across neuropils,
+then thresholds. `weighted_connected_core_v1` starts from maximum total synaptic
+strength, grows through the strongest undirected frontier with numeric root-ID ties, and
+records component restarts. The saved graph keeps all directed induced edges, original
+weights, and self-loops. Input nodes are ranked by outgoing strength and output nodes by
+incoming strength; these are artificial task-independent interfaces, not sensory/motor
+annotations. NPZ, node CSV, manifest, stats, source/artifact hashes, selection parameters,
+and reachability are written without overwrite.
+
+Start with 512 nodes on an RTX 5070 with about 12 GiB VRAM, then 1024. Consider 2048 only
+after measured resource logs; do not attempt 4096 until smaller stages have been reviewed.
+`flywire_smoke_gpu` targets the already prepared 512-node graph and remains a train
+dry-run by default.
+
+The older offline converter remains available for a user-authorized local FAFB v783 CSV
+already aggregated to `pre_group,post_group,synapse_count`:
 
 ```text
 python -m fly_abstraction graph convert-flywire --edges data/raw/flywire/authorized_v783_groups.csv --output data/processed/flywire_fafb_v783.npz
 ```
 
-The converter streams the CSV through an on-disk SQLite aggregation, writes NPZ plus a
+That converter streams the CSV through an on-disk SQLite aggregation, writes NPZ plus a
 CSV node map and sidecar provenance manifest, records SHA256 and accepted/rejected row
 counts, and refuses overwrite. It does not bypass FlyWire authentication or data-use
 terms.
@@ -175,6 +211,8 @@ python -m fly_abstraction --profile smoke_cpu show-config
 python -m fly_abstraction --profile smoke_cpu train
 python -m fly_abstraction --profile pilot_gpu train
 python -m fly_abstraction data download deepmind_mathematics
+python -m fly_abstraction data download flywire_fafb_v783
+python -m fly_abstraction --profile flywire_smoke_gpu train
 docker compose config --quiet
 docker buildx build --check --file Dockerfile.cpu .
 docker buildx build --check --file Dockerfile.gpu .

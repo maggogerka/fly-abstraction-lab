@@ -140,11 +140,13 @@ def prepare_experiment(config: dict[str, Any]) -> PreparedExperiment:
         )
         graph = tiny_synthetic_graph(nodes, int(config["seed"]))
     elif config["graph"]["kind"] == "flywire_fafb_v783":
-        graph = (
-            FlyWireFAFBV783Adapter()
-            .load(Path(config["graph"]["path"]))
-            .filtered(max_nodes=int(config["graph"]["max_graph_nodes"]))
-        )
+        graph = FlyWireFAFBV783Adapter().load(Path(config["graph"]["path"]))
+        if graph.num_nodes > int(config["graph"]["max_graph_nodes"]):
+            raise ValueError(
+                f"Prepared FlyWire graph has {graph.num_nodes} nodes, exceeding "
+                f"graph.max_graph_nodes={config['graph']['max_graph_nodes']}; "
+                "prepare the intended bounded graph explicitly"
+            )
     else:
         raise ValueError(f"Unknown graph kind: {config['graph']['kind']}")
     graph = apply_graph_variant(graph, str(config["graph"]["variant"]), int(config["seed"]))

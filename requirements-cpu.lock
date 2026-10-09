@@ -2,4 +2,5 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 -r requirements.lock
+pyarrow==20.0.0
 torch==2.7.1+cpu

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import zipfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -193,29 +195,50 @@ def tiny_synthetic_graph(num_nodes: int = 32, seed: int = 17) -> ConnectomeGraph
 
 
 def save_graph_npz(path: Path, graph: ConnectomeGraph) -> Path:
-    """Write the primary scalable binary graph artifact without overwriting."""
+    """Write a byte-deterministic scalable binary graph artifact without overwriting."""
     if path.suffix.lower() != ".npz":
         raise ValueError("Binary graph paths must use the .npz suffix")
     if path.exists():
         raise FileExistsError(f"Refusing to overwrite existing graph: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".npz.tmp")
-    with temporary.open("wb") as handle:
-        np.savez_compressed(
-            handle,
-            num_nodes=np.asarray([graph.num_nodes], dtype=np.int64),
-            edge_index=graph.edge_index.detach().cpu().numpy(),
-            edge_weight=graph.edge_weight.detach().cpu().numpy(),
-            input_nodes=graph.input_nodes.detach().cpu().numpy(),
-            output_nodes=graph.output_nodes.detach().cpu().numpy(),
-            metadata=np.frombuffer(
-                json.dumps(graph.metadata, sort_keys=True).encode("utf-8"), dtype=np.uint8
-            ),
-            manifest=np.frombuffer(
-                json.dumps(graph.manifest, sort_keys=True).encode("utf-8"), dtype=np.uint8
-            ),
-        )
-    temporary.replace(path)
+    if temporary.exists():
+        raise FileExistsError(f"Refusing to overwrite partial graph: {temporary}")
+    arrays = {
+        "num_nodes": np.asarray([graph.num_nodes], dtype=np.int64),
+        "edge_index": graph.edge_index.detach().cpu().numpy(),
+        "edge_weight": graph.edge_weight.detach().cpu().numpy(),
+        "input_nodes": graph.input_nodes.detach().cpu().numpy(),
+        "output_nodes": graph.output_nodes.detach().cpu().numpy(),
+        "metadata": np.frombuffer(
+            json.dumps(
+                graph.metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8"),
+            dtype=np.uint8,
+        ),
+        "manifest": np.frombuffer(
+            json.dumps(
+                graph.manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8"),
+            dtype=np.uint8,
+        ),
+    }
+    try:
+        with zipfile.ZipFile(
+            temporary, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+        ) as archive:
+            for name, array in arrays.items():
+                payload = io.BytesIO()
+                np.save(payload, array, allow_pickle=False)
+                info = zipfile.ZipInfo(f"{name}.npy", date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.create_system = 0
+                info.external_attr = 0
+                archive.writestr(info, payload.getvalue(), compresslevel=9)
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
     return path
 
 

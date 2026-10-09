@@ -12,6 +12,7 @@ license = {file = "LICENSE"}
 authors = [{name = "maggogerka"}]
 dependencies = [
   "numpy==2.2.6",
+  "pyarrow==20.0.0",
   "psutil==7.0.0",
   "PyYAML==6.0.2",
   "sympy==1.14.0",

@@ -19,6 +19,25 @@ equivalence scoring are a future stage; they must not be mixed into MVP results.
 The UCI Energy Efficiency pilot validates the end-to-end numeric research path. Its
 small synthetic graph is a systems pilot, not a confirmatory connectome experiment.
 
+The first scientific topology artifact is a bounded core derived from the public static
+FlyWire FAFB v783 proofread-connection table (DOI `10.5281/zenodo.10676866`). Preparation
+aggregates directed neuron pairs across neuropils and applies the declared synapse
+threshold before selection. `weighted_connected_core_v1` then grows from maximum total
+strength through the maximum-strength undirected frontier with numeric root-ID tie
+breaking; disconnected-component restarts are recorded. The final artifact retains the
+directed induced edges, weights, and self-loops.
+
+This selection intentionally favors a strong connected core and can bias topology,
+degree, neuropil representation, and reachability. It is a reproducible engineering
+choice, not a claim that the selected subgraph is a complete or functionally privileged
+brain circuit. Input/output mappings are artificial task-independent strength rankings,
+not sensory/motor labels. Compare `real` only with controls that retain these exact
+mappings, data, optimization, and seeds.
+
+On the current RTX 5070 (~12 GiB), validate 512 nodes first and 1024 second. Consider
+2048 only after measured resource logs and never move to 4096 merely because preparation
+succeeds. Graph preparation and one-epoch smoke validation are not scientific results.
+
 ## Confirmatory hypotheses for a later approved study
 
 - **H1:** A trainable connectome RNN exceeds a degree/size-matched topology control on
@@ -88,5 +107,8 @@ model result, not as animal cognition or biological explanation.
 
 Runs record resolved config, Git state, environment/hardware, seeds, pinned dependency
 versions, and SHA256 hashes for data, graph, configuration, and split manifest. Graphs use
-binary NPZ with streamed byte hashing. Results are append-only by run ID. Raw datasets and
+byte-deterministic binary NPZ with streamed byte hashing. FlyWire sidecars additionally
+record source DOI/URL/SHA256, published checksum, algorithm/parameters, row counts,
+selected-root hash, mappings, components, reachability, and artifact hashes. Results are
+append-only by run ID. Raw datasets and
 licensed connectome exports are neither committed nor redistributed by this project.

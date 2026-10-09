@@ -13,7 +13,7 @@ No command in the setup/doctor/smoke path downloads datasets or trains a model.
 Clone the branch or unpack its ZIP:
 
 ```text
-git clone --branch feat/research-pc-readiness https://github.com/maggogerka/fly-abstraction-lab.git
+git clone --branch main https://github.com/maggogerka/fly-abstraction-lab.git
 cd fly-abstraction-lab
 ```
 
@@ -55,9 +55,11 @@ The sparse recurrent cell keeps its accumulation state in FP32 and explicitly co
 autocast projection output before indexed injection, so BF16/FP16 smoke and pilot paths
 do not fail with an `index_copy_` dtype mismatch.
 
-The menu keeps these operations separate: PC check, image build, GPU doctor, GPU smoke,
-UCI info, confirmed UCI download, UCI preparation, pilot dry-run, and confirmed pilot
-training. UCI download requires `DOWNLOAD UCI`; training requires `TRAIN PILOT`.
+The menu keeps setup, UCI, and FlyWire operations separate. FlyWire metadata, download,
+512/1024 preparation dry-runs, confirmed preparation, inspect, training dry-run, and
+confirmed smoke training are distinct actions. The exact confirmations are
+`DOWNLOAD FLYWIRE V783`, `PREPARE FLYWIRE 512`/`PREPARE FLYWIRE 1024`, and
+`TRAIN FLYWIRE SMOKE`.
 
 To reopen only the menu:
 
@@ -143,17 +145,58 @@ docker compose --profile research run --rm research-gpu data prepare-deepmind-nu
 This keeps only directly parseable finite numeric answers and writes each official train,
 interpolation, and extrapolation split separately. It is not connected to pilot training.
 
-## Optional authorized local FlyWire export
+## Official static FlyWire FAFB v783 preparation
 
-The project does not access FlyWire. If the owner already has an authorized FAFB v783
-aggregate with `pre_group,post_group,synapse_count` columns:
+This path uses the public Zenodo record `10.5281/zenodo.10676866` and its
+`proofread_connections_783.feather` file only. The file is 852,022,274 bytes; the
+published MD5 is `f48f972d262323a102aed49af1396b8a`. The record currently does not state
+a data license, so review the record and Zenodo terms instead of assuming one.
+
+Review metadata first without downloading:
 
 ```text
-docker compose --profile research run --rm research-gpu graph convert-flywire --edges data/raw/flywire/authorized_v783_groups.csv --output data/processed/flywire_fafb_v783.npz
+docker compose --profile research run --rm research-gpu data download flywire_fafb_v783
 ```
 
-The NPZ, node map, and provenance manifest remain local. Do not redistribute them unless
-the source terms permit it.
+Only after review, explicitly download:
+
+```text
+docker compose --profile research run --rm research-gpu data download flywire_fafb_v783 --confirm-download
+```
+
+The downloader verifies the published MD5, computes SHA256 while streaming, writes an
+adjacent manifest, and refuses overwrite. Start with a 512-node preparation. The first
+command is a dry-run and creates no graph:
+
+```text
+docker compose --profile research run --rm research-gpu graph prepare-flywire-v783 --source data/raw/flywire_fafb_v783/proofread_connections_783.feather --output data/processed/flywire_v783_core_512.npz --nodes 512 --min-pair-synapses 5 --input-node-count 64 --output-node-count 64 --seed 1701
+docker compose --profile research run --rm research-gpu graph prepare-flywire-v783 --source data/raw/flywire_fafb_v783/proofread_connections_783.feather --output data/processed/flywire_v783_core_512.npz --nodes 512 --min-pair-synapses 5 --input-node-count 64 --output-node-count 64 --seed 1701 --confirm-prepare
+docker compose --profile research run --rm research-gpu graph inspect --graph data/processed/flywire_v783_core_512.npz
+```
+
+Repeat with 1024 only after inspecting 512. Consider 2048 only after reviewing actual
+RAM/VRAM logs. Do not attempt 4096 on the RTX 5070 (~12 GiB) before those measurements.
+The strength-ranked input/output sets are artificial task-independent mappings, not
+biological sensory/motor annotations.
+
+Prepare deterministic tiny numeric smoke data once, then review the profile and training
+dry-run:
+
+```text
+docker compose --profile research run --rm research-gpu data prepare-tiny --count 64 --seed 1701
+docker compose --profile research run --rm research-gpu --profile flywire_smoke_gpu show-config
+docker compose --profile research run --rm research-gpu --profile flywire_smoke_gpu train
+```
+
+The final command must say `DRY-RUN COMPLETE` and create no run. Only a human may then
+start the one-epoch smoke:
+
+```text
+docker compose --profile research run --rm research-gpu --profile flywire_smoke_gpu train --confirm-train --run-id flywire_smoke_gpu_seed1701
+```
+
+The older `graph convert-flywire` command remains for a separately authorized local
+aggregate. It performs no authentication and must not be used to bypass access terms.
 
 ## Return package after the pilot
 
@@ -167,6 +210,10 @@ Send the repository owner:
 - from `results/<pilot_run_id>/`: `config.resolved.yaml`, `run_manifest.json`,
   `summary.json`, `metrics.json`, `history.csv`, and `predictions.jsonl`;
 - complete error logs instead of partial conclusions if anything stops.
+- `data/raw/flywire_fafb_v783/proofread_connections_783.feather.download.json`;
+- the prepared graph's `.manifest.json`, `.stats.json`, and `.nodes.csv` sidecars;
+- the FlyWire smoke run's config, run manifest, summary, metrics, history, predictions,
+  and its complete diagnostics log.
 
 Send `checkpoint.pt` only when continuation is needed. Do not send licensed FlyWire raw
 exports or prepared connectomes without redistribution permission.

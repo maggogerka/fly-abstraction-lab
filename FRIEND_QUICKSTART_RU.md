@@ -4,10 +4,10 @@
 желательно не менее 25 GB свободного места.
 Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устанавливать не нужно.
 
-1. Скачайте ZIP ветки `feat/research-pc-readiness` и распакуйте его либо выполните:
+1. Скачайте ZIP ветки `main` и распакуйте его либо выполните:
 
    ```text
-   git clone --branch feat/research-pc-readiness https://github.com/maggogerka/fly-abstraction-lab.git
+   git clone --branch main https://github.com/maggogerka/fly-abstraction-lab.git
    cd fly-abstraction-lab
    ```
 
@@ -66,3 +66,36 @@ Python, PyTorch, CUDA Toolkit и cuDNN на Windows отдельно устан�
 
 `checkpoint.pt` отправляйте только если нужно продолжить обучение. Не отправляйте
 FlyWire-экспорты без отдельного разрешения на распространение.
+
+## FlyWire FAFB v783: отдельный безопасный сценарий
+
+Используется только публичный статический файл
+`proofread_connections_783.feather` из Zenodo, DOI
+`10.5281/zenodo.10676866`. Размер файла — 852 022 274 байта, опубликованный MD5 —
+`f48f972d262323a102aed49af1396b8a`. Лицензия в карточке набора не указана, поэтому
+перед загрузкой проверьте карточку и условия Zenodo.
+
+В меню действия разделены:
+
+- 10 — только показать метаданные;
+- 11 — загрузить после точной фразы `DOWNLOAD FLYWIRE V783`;
+- 12/14 — dry-run подготовки 512/1024 без создания файлов;
+- 13/15 — подготовить после `PREPARE FLYWIRE 512` или `PREPARE FLYWIRE 1024`;
+- 16/17 — проверить готовый граф;
+- 18 — dry-run обучения без создания run;
+- 19 — одна smoke-эпоха только после `TRAIN FLYWIRE SMOKE`.
+
+Для RTX 5070 с примерно 12 GiB VRAM сначала используйте 512 узлов, затем 1024. К 2048
+переходите только после проверки логов RAM/VRAM; 4096 без этих измерений не запускайте.
+Отображения входных и выходных узлов искусственные и независимые от задачи — это не
+сенсорные и не моторные нейроны.
+
+После FlyWire smoke отправьте владельцу:
+
+- `results/diagnostics/flywire-*.log` и полный лог запуска;
+- `proofread_connections_783.feather.download.json`;
+- `flywire_v783_core_512.manifest.json`, `.stats.json` и `.nodes.csv`;
+- из каталога run: `config.resolved.yaml`, `run_manifest.json`, `summary.json`,
+  `metrics.json`, `history.csv` и `predictions.jsonl`.
+
+Сам Feather/NPZ отправляйте только если условия источника разрешают распространение.

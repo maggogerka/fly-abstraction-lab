@@ -246,6 +246,69 @@ function Invoke-PilotTraining {
     Write-Host "Результаты сохранены в results\$runId" -ForegroundColor Green
 }
 
+function Invoke-FlyWireInfo {
+    Write-Step 'Метаданные FlyWire FAFB v783 (без загрузки)'
+    Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', 'data', 'download', 'flywire_fafb_v783') 'flywire-v783-info.log'
+}
+
+function Invoke-FlyWireDownload {
+    Write-Step 'Подтверждаемая загрузка официального FlyWire FAFB v783 Feather'
+    if (-not (Read-Exact 'Проверены DOI, условия Zenodo, checksum, 852 MB и свободное место?' 'DOWNLOAD FLYWIRE V783')) {
+        throw 'Загрузка FlyWire не подтверждена. Ничего не скачано.'
+    }
+    Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', 'data', 'download', 'flywire_fafb_v783', '--confirm-download') 'flywire-v783-download.log'
+}
+
+function Invoke-FlyWirePrepare([int]$Nodes, [switch]$Confirm) {
+    $source = 'data/raw/flywire_fafb_v783/proofread_connections_783.feather'
+    $output = "data/processed/flywire_v783_core_$Nodes.npz"
+    $arguments = @(
+        'compose', '--profile', 'research', 'run', '--rm', 'research-gpu',
+        'graph', 'prepare-flywire-v783',
+        '--source', $source,
+        '--output', $output,
+        '--nodes', $Nodes.ToString(),
+        '--min-pair-synapses', '5',
+        '--input-node-count', '64',
+        '--output-node-count', '64',
+        '--seed', '1701'
+    )
+    if ($Confirm) {
+        if (-not (Read-Exact "Подготовить новый подграф на $Nodes узлов без перезаписи существующих файлов?" "PREPARE FLYWIRE $Nodes")) {
+            throw 'Подготовка FlyWire не подтверждена. Артефакты не созданы.'
+        }
+        $arguments += '--confirm-prepare'
+        Invoke-Logged 'docker.exe' $arguments "flywire-v783-prepare-$Nodes.log"
+    } else {
+        Write-Step "FlyWire ${Nodes}: dry-run подготовки, файлы не создаются"
+        Invoke-Logged 'docker.exe' $arguments "flywire-v783-prepare-$Nodes-dry-run.log"
+    }
+}
+
+function Invoke-FlyWireInspect([int]$Nodes) {
+    Write-Step "Инспекция подготовленного FlyWire-подграфа на $Nodes узлов"
+    $graph = "data/processed/flywire_v783_core_$Nodes.npz"
+    Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', 'graph', 'inspect', '--graph', $graph) "flywire-v783-inspect-$Nodes.log"
+}
+
+function Invoke-FlyWireSmokeDryRun {
+    Write-Step 'FlyWire GPU smoke training: dry-run без обучения'
+    Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', '--profile', 'flywire_smoke_gpu', 'train') 'flywire-smoke-dry-run.log'
+}
+
+function Invoke-FlyWireSmokeTraining {
+    Write-Step 'Подтверждаемое однократное FlyWire GPU smoke training'
+    if (-not (Read-Exact 'Это запустит 1 эпоху на подготовленном графе 512. Продолжить?' 'TRAIN FLYWIRE SMOKE')) {
+        throw 'FlyWire smoke training не подтверждён. Обучение не запущено.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $script:RepoRoot 'data\processed\tiny.jsonl'))) {
+        Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', 'data', 'prepare-tiny', '--count', '64', '--seed', '1701') 'flywire-smoke-tiny-data.log'
+    }
+    $runId = 'flywire_smoke_gpu_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
+    Invoke-Logged 'docker.exe' @('compose', '--profile', 'research', 'run', '--rm', 'research-gpu', '--profile', 'flywire_smoke_gpu', 'train', '--confirm-train', '--run-id', $runId) "$runId.log"
+    Write-Host "Результаты сохранены в results\$runId" -ForegroundColor Green
+}
+
 function Invoke-GuidedSetup {
     Test-FriendPc -OfferInstall | Out-Null
     Invoke-Build
@@ -268,6 +331,16 @@ function Show-Menu {
   7 — подготовить UCI
   8 — pilot dry-run (без обучения)
   9 — pilot training (нужно TRAIN PILOT)
+ 10 — сведения о FlyWire FAFB v783 (без загрузки)
+ 11 — скачать FlyWire v783 (нужно DOWNLOAD FLYWIRE V783)
+ 12 — подготовка FlyWire 512: dry-run
+ 13 — подготовить FlyWire 512 (нужно PREPARE FLYWIRE 512)
+ 14 — подготовка FlyWire 1024: dry-run
+ 15 — подготовить FlyWire 1024 (нужно PREPARE FLYWIRE 1024)
+ 16 — inspect FlyWire 512
+ 17 — inspect FlyWire 1024
+ 18 — FlyWire GPU smoke training: dry-run
+ 19 — FlyWire GPU smoke training (нужно TRAIN FLYWIRE SMOKE)
   0 — выход
 '@
         $choice = Read-Host 'Выберите действие'
@@ -283,6 +356,16 @@ function Show-Menu {
                 '7' { Invoke-UciPrepare }
                 '8' { Invoke-PilotDryRun }
                 '9' { Invoke-PilotTraining }
+                '10' { Invoke-FlyWireInfo }
+                '11' { Invoke-FlyWireDownload }
+                '12' { Invoke-FlyWirePrepare -Nodes 512 }
+                '13' { Invoke-FlyWirePrepare -Nodes 512 -Confirm }
+                '14' { Invoke-FlyWirePrepare -Nodes 1024 }
+                '15' { Invoke-FlyWirePrepare -Nodes 1024 -Confirm }
+                '16' { Invoke-FlyWireInspect -Nodes 512 }
+                '17' { Invoke-FlyWireInspect -Nodes 1024 }
+                '18' { Invoke-FlyWireSmokeDryRun }
+                '19' { Invoke-FlyWireSmokeTraining }
                 default { Write-Warning 'Неизвестный пункт меню.' }
             }
         } catch {
